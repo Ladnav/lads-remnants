@@ -29,6 +29,6 @@ npm run build
   - Emergências: uma expedição noturna pode ficar encurralada. O jogador assume o controle (incursão em modo emergência, com a horda já acordada) ou deixa com a IA.
   - Relatório de retorno com o saldo de recursos, quem morreu ou partiu e quem chegou.
 
-Balanceamento atual (`npm run balance`, 40 sementes): sem nenhuma visita, a comunidade dura cerca de 6 dias. Um jogador casual simulado (2 visitas por dia) dura cerca de 23 dias, e 30% chegam ao dia 30.
+Balanceamento atual (`npm run balance`, 40 sementes): sem nenhuma visita, a comunidade dura cerca de 6 dias. Um jogador casual simulado (2 visitas por dia) dura cerca de 23 dias, e 25% chegam ao dia 30 (o bot não usa incursões ativas nem resolve emergências).
 
 Controles da incursão: setas/WASD movem. Andar até uma porta abre, andar até um zumbi ataca. E procura, Espaço espera, X extrai, P/F abrem ou forçam portas trancadas, B faz curativo.
