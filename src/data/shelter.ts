@@ -113,7 +113,7 @@ export const SHELTER_POS: [number, number] = [5, 15];
 export const LOCATIONS: readonly LocationDef[] = [
   { id: 'market', name: 'Mercado Bom Preço', icon: '🛒', description: 'Comida e água, se sobrou alguma.', danger: 1, loot: ['canned_food', 'canned_food', 'canned_food', 'water', 'water', 'wood', 'scrap', 'bandage'], pos: [10, 11], zombies: [3, 5], known: true },
   { id: 'garage', name: 'Oficina do Seu Zé', icon: '🔧', description: 'Sucata, peças, combustível.', danger: 2, loot: ['scrap', 'scrap', 'parts', 'parts', 'fuel', 'wood', 'crowbar'], pos: [7, 5], zombies: [4, 6], known: true },
-  { id: 'pharmacy', name: 'Farmácia da Esquina', icon: '💊', description: 'Remédios e bandagens. Muita gente pensou nisso.', danger: 2, loot: ['medicine', 'bandage', 'bandage', 'water', 'components'], pos: [15, 8], zombies: [4, 6], known: false },
+  { id: 'pharmacy', name: 'Farmácia da Esquina', icon: '💊', description: 'Remédios e bandagens. Muita gente pensou nisso.', danger: 2, loot: ['medicine', 'bandage', 'bandage', 'water', 'components'], pos: [18, 8], zombies: [4, 6], known: false },
   { id: 'hospital', name: 'Hospital Municipal', icon: '🏥', description: 'Tudo o que se precisa, e tudo o que se teme.', danger: 3, loot: ['medicine', 'medicine', 'components', 'bandage', 'parts', 'water'], pos: [21, 5], zombies: [6, 8], known: false },
   { id: 'police', name: 'Delegacia', icon: '🚓', description: 'Munição e armas. Os mortos ainda estão de farda.', danger: 3, loot: ['ammo', 'ammo', 'crowbar', 'components', 'canned_food'], pos: [22, 14], zombies: [6, 8], known: false },
 ];

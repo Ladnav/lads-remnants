@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { RESOURCES, locationById, type ResourceId } from './data/shelter';
-import { RaidScene, TILE } from './game/RaidScene';
+import { RaidScene } from './game/RaidScene';
+import { TILE, WALL_H } from './game/oblique';
 import { RaidUi } from './game/raidUi';
 import { RegionScene } from './game/RegionScene';
 import { ShelterScene } from './game/ShelterScene';
@@ -69,7 +70,7 @@ const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: MAP_W * TILE,
-  height: MAP_H * TILE,
+  height: MAP_H * TILE + WALL_H,
   backgroundColor: '#0a0908',
   pixelArt: true,
   scene: [],
