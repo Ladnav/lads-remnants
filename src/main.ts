@@ -1,67 +1,73 @@
 import Phaser from 'phaser';
-import { RESOURCES, locationById, type ResourceId } from './data/shelter';
-import { RaidScene } from './game/RaidScene';
+import { RESOURCES, type ResourceId } from './data/shelter';
 import { TILE, WALL_H } from './game/oblique';
+import { RaidScene } from './game/RaidScene';
 import { RaidUi } from './game/raidUi';
 import { RegionScene } from './game/RegionScene';
 import { ShelterScene } from './game/ShelterScene';
 import { SHOWN_RESOURCES, ShelterUi, clock, diaryHtml, fmt, type View } from './game/shelterUi';
-import { clearSave, loadSave, loadSpeed, saveGame, saveSpeed } from './game/save';
+import { LocalBackend, type Backend } from './net/backend';
+import { SupabaseBackend } from './net/supabase';
+import { applyCommand, type RaidRequest } from './server/game';
 import { MAP_H, MAP_W } from './sim/raid/mapgen';
-import { REAL_MS_PER_GAME_HOUR, aliveSurvivors, dayOf } from './sim/shelter/core';
-import { takeOverEmergency } from './sim/shelter/expeditions';
-import {
-  advanceTo,
-  applyRaidResult,
-  createShelter,
-  hasUndiscovered,
-  isGameOver,
-  markSeen,
-  raidHp,
-  tickHour,
-} from './sim/shelter/shelter';
-import type { ShelterState, ShelterSurvivor } from './sim/shelter/types';
+import type { Action } from './sim/raid/types';
+import { aliveSurvivors, dayOf } from './sim/shelter/core';
+import { advanceTo, isGameOver, markSeen } from './sim/shelter/shelter';
+import type { ShelterState } from './sim/shelter/types';
 
 const hud = document.getElementById('hud')!;
 const overlay = document.getElementById('overlay')!;
 const hint = document.getElementById('hint')!;
 
-let shelter: ShelterState = loadSave() ?? createShelter((Math.random() * 2 ** 31) | 0, Date.now());
-let speed = loadSpeed();
-let mode: View | 'raid' = 'shelter';
+/** Online quando o Supabase está configurado (.env.local); `?offline` força o modo local. */
+function pickBackend(): Backend {
+  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  const forceOffline = new URLSearchParams(location.search).has('offline');
+  return url && key && !forceOffline ? new SupabaseBackend(url, key) : new LocalBackend();
+}
 
-const msPerHour = () => REAL_MS_PER_GAME_HOUR / speed;
+let backend = pickBackend();
+let shelter!: ShelterState;
+let mode: View | 'raid' = 'shelter';
+let busy = false;
 
 const shelterScene = new ShelterScene(() => render());
 const regionScene = new RegionScene(() => render());
 const raidScene = new RaidScene(() => raidUi.render());
 
 const shelterUi = new ShelterUi(hud, {
-  changed: () => {
-    saveGame(shelter);
+  changed: () => render(),
+  command: async (cmd) => {
+    // Otimista: aplica já (mesmas regras do servidor) e troca pelo estado oficial na resposta.
+    if (backend.online) applyCommand(shelter, cmd, Date.now());
     render();
+    try {
+      const r = await backend.command(cmd);
+      adopt(r.state);
+      return r.error ?? null;
+    } catch (e) {
+      return (e as Error).message;
+    }
   },
   setView: (v) => switchTo(v),
-  startRaid: (id, loc) => {
-    const v = shelter.survivors.find((x) => x.id === id);
-    if (v && v.status === 'home') startRaid(v, loc, false);
-  },
+  startRaid: (survivorId, locationId) => void playRaid({ survivorId, locationId }),
   takeOver: (expId) => {
-    const taken = takeOverEmergency(shelter, expId);
-    if (taken) startRaid(taken.survivor, taken.locationId, true);
+    const e = shelter.expeditions.find((x) => x.id === expId);
+    if (e?.emergency) void playRaid({ survivorId: e.emergency.survivorId, locationId: e.locationId, emergencyExpId: expId });
   },
-  setSpeed: (v) => {
-    advanceTo(shelter, Date.now(), msPerHour());
-    speed = v;
-    shelter.lastRealMs = Date.now();
-    saveSpeed(v);
-  },
-  skip: (hours) => {
-    for (let i = 0; i < hours && !isGameOver(shelter); i++) tickHour(shelter);
-    saveGame(shelter);
+  skip: async (hours) => {
+    try {
+      const r = await backend.skip(hours);
+      adopt(r.state);
+      if (r.error) shelterUi.setError(r.error);
+    } catch (e) {
+      shelterUi.setError((e as Error).message);
+    }
     render();
   },
-  speed: () => speed,
+  account: () => backend.account(),
+  linkEmail: (email) => backend.linkEmail(email),
 });
 const raidUi = new RaidUi(raidScene, hud, overlay);
 regionScene.setSelectHandler((id) => shelterUi.select(id));
@@ -79,20 +85,38 @@ const game = new Phaser.Game({
       g.scene.add('raid', raidScene, false);
       g.scene.add('shelter', shelterScene, false);
       g.scene.add('region', regionScene, false);
-      boot();
+      void boot();
     },
   },
 });
 
-function boot(): void {
-  // O que aconteceu enquanto a aba esteve fechada.
+function adopt(s: ShelterState): void {
+  shelter = s;
+  if (mode !== 'raid') shelterUi.attach(shelter);
+}
+
+async function boot(): Promise<void> {
+  modal(`<h1>LADS REMNANTS</h1><p>${backend.online ? 'Conectando ao abrigo…' : 'Abrindo o abrigo…'}</p>`);
+  try {
+    shelter = await backend.load();
+  } catch (e) {
+    modal(`<h1>LADS REMNANTS</h1>
+      <p class="bad">Não foi possível falar com o servidor: ${(e as Error).message}</p>
+      <div class="actions"><button class="primary" id="retry">Tentar de novo</button><button id="offline">Jogar offline</button></div>`);
+    document.getElementById('retry')!.addEventListener('click', () => void boot());
+    document.getElementById('offline')!.addEventListener('click', () => {
+      backend = new LocalBackend();
+      void boot();
+    });
+    return;
+  }
+  overlay.classList.add('hidden');
   const seenBefore = shelter.lastSeenHour;
   const resBefore = shelter.seenResources;
   const aliveBefore = shelter.seenAlive;
-  advanceTo(shelter, Date.now(), msPerHour());
-  saveGame(shelter);
   shelterUi.attach(shelter);
-  game.scene.start('shelter');
+  if (shelterScene.ready) render();
+  else game.scene.start('shelter');
   if (shelter.hour > seenBefore) showReport(seenBefore, resBefore, aliveBefore);
   else if (isGameOver(shelter)) showGameOver();
 }
@@ -111,7 +135,7 @@ function switchTo(v: View): void {
 }
 
 function render(): void {
-  if (mode === 'raid') return;
+  if (mode === 'raid' || !shelter) return;
   markSeen(shelter);
   if (mode === 'shelter') {
     hint.textContent = 'Defina tarefas, construa e cuide do grupo. A comunidade segue viva com a aba fechada.';
@@ -123,50 +147,84 @@ function render(): void {
   shelterUi.render();
 }
 
+// O relógio anda na tela; o servidor confirma a cada comando e a cada poucos minutos.
 setInterval(() => {
-  const passed = advanceTo(shelter, Date.now(), msPerHour());
-  if (!passed) return;
-  saveGame(shelter);
+  if (!shelter || mode === 'raid') return;
+  if (!advanceTo(shelter, Date.now())) return;
   if (isGameOver(shelter)) showGameOver();
   render();
 }, 1000);
 
-function startRaid(v: ShelterSurvivor, locationId: string, emergency: boolean): void {
-  const loc = locationById(locationId);
-  const back = mode === 'raid' ? 'shelter' : mode;
-  game.scene.stop(SCENE_OF[back]);
-  mode = 'raid';
-  shelterUi.detach();
-  hint.textContent = 'Setas/WASD mover · andar até uma porta abre · andar até um zumbi ataca · E procurar · Espaço esperar · X extrair';
-  raidUi.begin(
-    { id: v.id, name: v.name, bio: v.bio, traits: v.traits, maxHp: 3 },
-    {
-      site: loc.name,
-      loot: loc.loot,
-      zombies: loc.zombies,
-      startHp: raidHp(v),
-      emergency,
-      mapNote: hasUndiscovered(shelter),
-    },
-    (outcome) => {
-      applyRaidResult(shelter, v.id, outcome, locationId);
-      saveGame(shelter);
-      game.scene.stop('raid');
-      mode = back;
-      shelterUi.attach(shelter);
-      game.scene.start(SCENE_OF[back]);
-      if (isGameOver(shelter)) showGameOver();
-    },
-  );
-  game.scene.start('raid');
+setInterval(() => {
+  if (!backend.online || !shelter || mode === 'raid' || busy) return;
+  backend
+    .load()
+    .then((s) => {
+      if (mode !== 'raid') {
+        adopt(s);
+        render();
+      }
+    })
+    .catch(() => {});
+}, 5 * 60 * 1000);
+
+async function playRaid(req: RaidRequest): Promise<void> {
+  if (busy) return;
+  busy = true;
+  try {
+    const r = await backend.startRaid(req);
+    adopt(r.state);
+    const ticket = r.value;
+    if (!ticket) {
+      shelterUi.setError(r.error ?? 'Não foi possível começar a incursão.');
+      render();
+      return;
+    }
+    const back: View = mode === 'raid' ? 'shelter' : mode;
+    game.scene.stop(SCENE_OF[back]);
+    mode = 'raid';
+    shelterUi.detach();
+    hint.textContent = 'Setas/WASD mover · andar até uma porta abre · andar até um zumbi ataca · E procurar · Espaço esperar · X extrair';
+    raidUi.begin(ticket, (actions) => void endRaid(ticket.id, actions, back));
+    game.scene.start('raid');
+  } catch (e) {
+    shelterUi.setError((e as Error).message);
+    render();
+  } finally {
+    busy = false;
+  }
+}
+
+async function endRaid(raidId: number, actions: Action[], back: View): Promise<void> {
+  modal('<p>Voltando para o abrigo…</p>');
+  let error: string | undefined;
+  try {
+    const r = await backend.finishRaid(raidId, actions);
+    shelter = r.state;
+    error = r.error;
+  } catch (e) {
+    error = (e as Error).message;
+  }
+  overlay.classList.add('hidden');
+  game.scene.stop('raid');
+  mode = back;
+  shelterUi.attach(shelter);
+  if (error) shelterUi.setError(error);
+  game.scene.start(SCENE_OF[back]);
+  if (isGameOver(shelter)) showGameOver();
 }
 
 window.addEventListener('keydown', (e) => {
   if (mode === 'raid') raidUi.key(e);
 });
 
-// Guarda o "visto por último" ao sair, para o relatório não repetir o que já foi lido.
-window.addEventListener('pagehide', () => saveGame(shelter));
+// Marca o que já foi visto ao sair, para o relatório não repetir o que já foi lido.
+window.addEventListener('pagehide', () => backend.leaving());
+
+function modal(inner: string): void {
+  overlay.innerHTML = `<div class="modal">${inner}</div>`;
+  overlay.classList.remove('hidden');
+}
 
 function showReport(since: number, resBefore: ShelterState['seenResources'], aliveBefore: string[]): void {
   const entries = shelter.diary.filter((e) => e.hour > since);
@@ -183,8 +241,7 @@ function showReport(since: number, resBefore: ShelterState['seenResources'], ali
   const aliveNow = aliveSurvivors(shelter).map((v) => v.id);
   const lost = shelter.survivors.filter((v) => aliveBefore.includes(v.id) && !aliveNow.includes(v.id));
   const joined = shelter.survivors.filter((v) => aliveBefore.length && !aliveBefore.includes(v.id) && aliveNow.includes(v.id));
-  overlay.innerHTML = `
-    <div class="modal">
+  modal(`
       <h1>LADS REMNANTS</h1>
       <h2>Enquanto você esteve fora</h2>
       <p>Passaram ${hours} horas no abrigo (${clock(since)} → ${clock(shelter.hour)}).</p>
@@ -192,34 +249,29 @@ function showReport(since: number, resBefore: ShelterState['seenResources'], ali
       ${joined.length ? `<p class="good">Chegaram: ${joined.map((v) => `<strong>${v.name}</strong>`).join(', ')}.</p>` : ''}
       ${deltas ? `<div class="resgrid" style="margin-bottom:10px">${deltas}</div>` : ''}
       <div class="log report">${entries.length ? diaryHtml(entries.slice(-40)) : '<div class="muted">Nada de importante. Só o silêncio e os gemidos ao longe.</div>'}</div>
-      <div class="actions" style="margin-top:12px"><button class="primary" id="report-ok">Voltar ao abrigo</button></div>
-    </div>`;
-  overlay.classList.remove('hidden');
+      <div class="actions" style="margin-top:12px"><button class="primary" id="report-ok">Voltar ao abrigo</button></div>`);
   document.getElementById('report-ok')!.addEventListener('click', () => {
     overlay.classList.add('hidden');
     if (isGameOver(shelter)) showGameOver();
     render();
-    saveGame(shelter);
+    void backend
+      .command({ type: 'seen' })
+      .then((r) => adopt(r.state))
+      .catch(() => {});
   });
 }
 
 function showGameOver(): void {
   if (!overlay.classList.contains('hidden')) return;
   const lost = shelter.survivors.map((v) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ');
-  overlay.innerHTML = `
-    <div class="modal">
+  modal(`
       <h2 class="bad">A comunidade acabou</h2>
       <p>Resistiram até o dia ${dayOf(shelter.hour)}. ${lost}.</p>
       <div class="log report">${diaryHtml(shelter.diary.slice(-15))}</div>
-      <div class="actions" style="margin-top:12px"><button class="primary" id="restart">Começar de novo</button></div>
-    </div>`;
-  overlay.classList.remove('hidden');
-  document.getElementById('restart')!.addEventListener('click', () => {
-    clearSave();
-    shelter = createShelter((Math.random() * 2 ** 31) | 0, Date.now());
-    shelterUi.attach(shelter);
+      <div class="actions" style="margin-top:12px"><button class="primary" id="restart">Começar de novo</button></div>`);
+  document.getElementById('restart')!.addEventListener('click', async () => {
+    adopt(await backend.reset());
     overlay.classList.add('hidden');
-    saveGame(shelter);
     render();
   });
 }

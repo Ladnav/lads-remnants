@@ -1,9 +1,11 @@
 import type { BuildingId, RecipeId, ResourceId, RiskRule, TaskId } from '../../data/shelter';
-import type { TraitId } from '../../data/survivors';
+import type { SurvivorDef, TraitId } from '../../data/survivors';
+import type { RaidOptions } from '../raid/raid';
 import type { EventTone } from '../raid/types';
 
 export type Emotion = 'ok' | 'triste' | 'deprimido' | 'quebrado';
-export type SurvivorStatus = 'home' | 'away' | 'dead' | 'gone';
+/** raid: dentro de uma incursão ativa (o jogador está jogando). */
+export type SurvivorStatus = 'home' | 'away' | 'raid' | 'dead' | 'gone';
 
 export interface ShelterSurvivor {
   id: string;
@@ -103,4 +105,15 @@ export interface ShelterState {
   /** Foto do abrigo da última vez que o jogador olhou (para o saldo do relatório). */
   seenResources: Record<ResourceId, number> | null;
   seenAlive: string[];
+  /** Incursão ativa em andamento: a semente vem do servidor e o resultado é conferido no fim. */
+  activeRaid: RaidTicket | null;
+}
+
+export interface RaidTicket {
+  id: number;
+  survivorId: string;
+  locationId: string;
+  seed: number;
+  opts: RaidOptions;
+  def: SurvivorDef;
 }

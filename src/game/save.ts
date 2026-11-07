@@ -2,7 +2,6 @@ import { migrate } from '../sim/shelter/shelter';
 import type { ShelterState } from '../sim/shelter/types';
 
 const SAVE_KEY = 'lads-remnants:save:v1';
-const SPEED_KEY = 'lads-remnants:speed';
 
 // Até a Fase 4 (Supabase), o abrigo vive no navegador.
 export function loadSave(): ShelterState | null {
@@ -27,24 +26,6 @@ export function saveGame(s: ShelterState): void {
 export function clearSave(): void {
   try {
     localStorage.removeItem(SAVE_KEY);
-  } catch {
-    // ignorado
-  }
-}
-
-/** Velocidade de depuração do relógio (1× = tempo real do jogo). */
-export function loadSpeed(): number {
-  try {
-    const v = Number(localStorage.getItem(SPEED_KEY));
-    return [1, 60, 600].includes(v) ? v : 1;
-  } catch {
-    return 1;
-  }
-}
-
-export function saveSpeed(v: number): void {
-  try {
-    localStorage.setItem(SPEED_KEY, String(v));
   } catch {
     // ignorado
   }

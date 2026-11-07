@@ -9,7 +9,14 @@ npm run dev       # http://localhost:5173
 npm test          # testes da simulação (Vitest)
 npm run balance   # simula 30 dias de comunidades (AFK x jogador casual)
 npm run build
+npm run deploy:edge   # empacota src/server e publica a Edge Function "game"
+npm run smoke:online  # teste ponta a ponta contra o Supabase
 ```
+
+### Online x offline
+Com `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` no `.env.local`, o jogo roda **online**: login anônimo e o servidor como autoridade. Sem essas variáveis, ou com `?offline` na URL, roda **offline** com as mesmas regras e save no navegador.
+
+O `.env.local` (fora do git) guarda também a senha do banco e o ref do projeto (`tlvymkqlpyrdubdlhohn`, região sa-east-1).
 
 ## Estrutura
 - `src/sim/`: simulação pura e determinística (sem Phaser).
@@ -17,6 +24,9 @@ npm run build
   - `shelter/`: abrigo idle. Tick de 1h de jogo com necessidades, emoções, construção, expedições noturnas, visitantes na porta e ataques de madrugada.
 - `src/data/`: itens, recursos, receitas, locais, traços e sobreviventes.
 - `src/game/`: cenas Phaser (abrigo, mapa da região e incursão), HUDs e save local.
+- `src/server/game.ts`: regras de servidor (comandos, ingressos de incursão, reprodução do log de ações). Rodam no navegador (offline) e na Edge Function (online).
+- `src/net/`: backends local e Supabase.
+- `supabase/`: migração (tabela `shelters` com RLS só de leitura), Edge Function `game` e config de auth.
 - `src/main.ts`: relógio em tempo real, troca abrigo ↔ incursão, relatório "enquanto você esteve fora".
 - `scripts/balance.ts`: balanceamento automático.
 
@@ -28,6 +38,14 @@ npm run build
   - Incursão ativa em qualquer local conhecido, com loot e quantidade de zumbis próprios.
   - Emergências: uma expedição noturna pode ficar encurralada. O jogador assume o controle (incursão em modo emergência, com a horda já acordada) ou deixa com a IA.
   - Relatório de retorno com o saldo de recursos, quem morreu ou partiu e quem chegou.
+- **Visual 3/4** no abrigo, no mapa e na incursão (câmera seguindo o sobrevivente).
+- **Fase 4**: backend no Supabase.
+  - Login anônimo, com opção de vincular e-mail depois.
+  - O servidor é a autoridade: o cliente só manda comandos e a tabela é só leitura para o jogador.
+  - A simulação avança de forma preguiçosa a cada acesso (determinística, sem cron).
+  - Incursões com ingresso: a semente vem do servidor e o loot sai da reprodução do log de ações. Fechar a aba no meio conta como fuga ferida.
+  - `ALLOW_DEV_TOOLS=true` (secret da função) libera +1h/+6h. **Desligue antes de playtests com outras pessoas.**
+  - Fica para a Fase 4b: push notifications (PWA) e o cron do tick.
 
 Balanceamento atual (`npm run balance`, 40 sementes): sem nenhuma visita, a comunidade dura cerca de 6 dias. Um jogador casual simulado (2 visitas por dia) dura cerca de 23 dias, e 25% chegam ao dia 30 (o bot não usa incursões ativas nem resolve emergências).
 

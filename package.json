@@ -8,9 +8,13 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "balance": "vite-node scripts/balance.ts"
+    "balance": "vite-node scripts/balance.ts",
+    "build:edge": "esbuild src/server/game.ts --bundle --format=esm --platform=neutral --target=es2022 --outfile=supabase/functions/game/_game.js",
+    "deploy:edge": "npm run build:edge && supabase functions deploy game --no-verify-jwt",
+    "smoke:online": "vite-node scripts/smoke-online.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "phaser": "3.90.0"
   },
   "devDependencies": {

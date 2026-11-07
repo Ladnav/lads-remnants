@@ -86,9 +86,10 @@ describe('emergências de expedição', () => {
     expect(pendingEmergencies(s)).toHaveLength(1);
     const taken = takeOverEmergency(s, s.expeditions[0].id);
     expect(taken?.survivor.id).toBe('iuri');
-    expect(taken?.survivor.status).toBe('home');
+    expect(taken?.survivor.status).toBe('raid');
     expect(pendingEmergencies(s)).toHaveLength(0);
 
+    taken!.survivor.status = 'home';
     applyRaidResult(s, 'iuri', { status: 'extracted', items: ['scrap'], hpLost: 1, kills: 2 }, 'garage');
     // A volta da expedição não resolve Iuri de novo.
     const diaryBefore = s.diary.length;

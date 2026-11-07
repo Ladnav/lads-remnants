@@ -30,7 +30,7 @@ export function homeSurvivors(s: ShelterState): ShelterSurvivor[] {
 }
 
 export function aliveSurvivors(s: ShelterState): ShelterSurvivor[] {
-  return s.survivors.filter((v) => v.status === 'home' || v.status === 'away');
+  return s.survivors.filter((v) => v.status === 'home' || v.status === 'away' || v.status === 'raid');
 }
 
 export function canAfford(s: ShelterState, cost: Cost): boolean {

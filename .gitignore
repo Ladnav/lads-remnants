@@ -4,3 +4,5 @@ dist
 
 .claude/
 .env*.local
+supabase/functions/game/_game.js
+supabase/.temp/

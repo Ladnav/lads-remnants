@@ -72,6 +72,7 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
     discovered: LOCATIONS.filter((l) => l.known).map((l) => l.id),
     seenResources: null,
     seenAlive: [],
+    activeRaid: null,
   };
   log(s, 'Dia 1. Uma casa de dois andares com muro alto. Três pessoas, pouca água, nenhum plano.');
   log(s, 'Comece pela bancada: sem ela, quase nada se constrói.');
@@ -83,6 +84,7 @@ export function migrate(s: ShelterState): ShelterState {
   s.discovered ??= LOCATIONS.filter((l) => l.known).map((l) => l.id);
   s.seenResources ??= null;
   s.seenAlive ??= [];
+  s.activeRaid ??= null;
   for (const e of s.expeditions) e.emergency ??= null;
   return s;
 }

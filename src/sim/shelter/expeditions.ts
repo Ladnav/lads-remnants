@@ -106,7 +106,7 @@ export function takeOverEmergency(s: ShelterState, expId: number): { survivor: S
   exp.emergency.state = 'played';
   // Sai da expedição: daqui em diante o destino dele(a) é decidido na incursão.
   v.expeditionId = null;
-  v.status = 'home';
+  v.status = 'raid';
   return { survivor: v, locationId: exp.locationId };
 }
 

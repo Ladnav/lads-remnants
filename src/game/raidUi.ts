@@ -1,5 +1,5 @@
 import { ITEMS } from '../data/items';
-import { TRAITS, type SurvivorDef } from '../data/survivors';
+import { TRAITS } from '../data/survivors';
 import { chebyshev, idx, manhattan } from '../sim/raid/grid';
 import {
   adjacentContainers,
@@ -10,21 +10,20 @@ import {
   computeVisible,
   createRaid,
   exitAt,
-  type RaidOptions,
   exitStatus,
   hasCrowbar,
   hasTrait,
   lootValue,
 } from '../sim/raid/raid';
 import type { Action, RaidEvent, RaidState, Vec } from '../sim/raid/types';
-import type { RaidOutcome } from '../sim/shelter/shelter';
+import type { RaidTicket } from '../sim/shelter/types';
 import type { RaidScene } from './RaidScene';
 
 /** Interface da incursão ativa: HUD lateral, teclado e tela de fim. */
 export class RaidUi {
   private state: RaidState | null = null;
   private log: RaidEvent[] = [];
-  private onDone: (o: RaidOutcome) => void = () => {};
+  private onDone: (actions: Action[]) => void = () => {};
 
   constructor(
     private scene: RaidScene,
@@ -45,9 +44,11 @@ export class RaidUi {
     return this.state !== null;
   }
 
-  begin(def: SurvivorDef, opts: RaidOptions, onDone: (o: RaidOutcome) => void): void {
+  /** Joga a incursão do ingresso; no fim entrega só o log de ações (o servidor confere). */
+  begin(ticket: RaidTicket, onDone: (actions: Action[]) => void): void {
     this.onDone = onDone;
-    const s = (this.state = createRaid((Math.random() * 2 ** 31) | 0, def, opts));
+    const def = ticket.def;
+    const s = (this.state = createRaid(ticket.seed, def, ticket.opts));
     const roof = s.exits.find((e) => e.id === 'roof');
     this.log = s.emergency
       ? [
@@ -130,15 +131,9 @@ export class RaidUi {
       </div>`;
     this.overlay.classList.remove('hidden');
     document.getElementById('raid-done')!.addEventListener('click', () => {
-      const outcome: RaidOutcome = {
-        status: escaped ? 'extracted' : 'dead',
-        items: [...s.backpack],
-        hpLost: wounds,
-        kills: s.kills,
-      };
       this.state = null;
       this.overlay.classList.add('hidden');
-      this.onDone(outcome);
+      this.onDone([...s.log]);
     });
   }
 

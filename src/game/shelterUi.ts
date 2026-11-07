@@ -1,11 +1,12 @@
 import { ITEMS } from '../data/items';
 import { LOCATIONS, RECIPES, RESOURCES, RISK_RULES, TASKS, locationById, type RecipeId, type ResourceId, type RiskRule, type TaskId } from '../data/shelter';
 import { TRAITS } from '../data/survivors';
+import type { Account } from '../net/backend';
+import type { ShelterCommand } from '../server/game';
 import { canAfford, dayOf, describeCost, emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
-import { cancelExpedition, delegateEmergency, pendingEmergencies, sendExpedition } from '../sim/shelter/expeditions';
-import { cancelProject, hasUndiscovered, setRationing, setTask, startProject, talk, workEfficiency } from '../sim/shelter/shelter';
+import { pendingEmergencies } from '../sim/shelter/expeditions';
+import { hasUndiscovered, workEfficiency } from '../sim/shelter/shelter';
 import type { DiaryEntry, Emotion, ShelterState, ShelterSurvivor } from '../sim/shelter/types';
-import { resolveDilemma } from '../sim/shelter/visitors';
 
 export type View = 'shelter' | 'map';
 
@@ -23,17 +24,19 @@ type Cmd =
   | { cmd: 'send' }
   | { cmd: 'cancelExp'; id: number }
   | { cmd: 'ration'; on: boolean }
-  | { cmd: 'speed'; value: number }
-  | { cmd: 'skip'; hours: number };
+  | { cmd: 'skip'; hours: number }
+  | { cmd: 'link' };
 
 export interface ShelterUiHooks {
   changed: () => void;
+  /** Manda um comando ao backend; devolve o aviso de regra, se houver. */
+  command: (cmd: ShelterCommand) => Promise<string | null>;
   setView: (v: View) => void;
   startRaid: (survivorId: string, locationId: string) => void;
   takeOver: (expId: number) => void;
-  setSpeed: (value: number) => void;
   skip: (hours: number) => void;
-  speed: () => number;
+  account: () => Account;
+  linkEmail: (email: string) => Promise<string>;
 }
 
 const EMOTION_LABEL: Record<Emotion, string> = { ok: 'bem', triste: 'triste', deprimido: 'deprimido(a)', quebrado: 'quebrado(a)' };
@@ -52,6 +55,7 @@ export class ShelterUi {
   private exp = { ids: new Set<string>(), risk: 'balanced' as RiskRule };
   private raidWho: string | null = null;
   private error = '';
+  private notice = '';
 
   constructor(
     private hud: HTMLElement,
@@ -84,6 +88,10 @@ export class ShelterUi {
     this.state = null;
   }
 
+  setError(msg: string): void {
+    this.error = msg;
+  }
+
   select(locationId: string): void {
     this.selected = locationId;
     this.error = '';
@@ -93,13 +101,18 @@ export class ShelterUi {
   private run(c: Cmd): void {
     const s = this.state!;
     this.error = '';
+    const send = (cmd: ShelterCommand) => {
+      void this.hooks.command(cmd).then((err) => {
+        this.error = err ?? '';
+        if (!err && cmd.type === 'send') this.exp.ids.clear();
+        this.hooks.changed();
+      });
+    };
     switch (c.cmd) {
       case 'view':
         this.view = c.view;
         this.hooks.setView(c.view);
         return;
-      case 'task': setTask(s, c.id, c.task); break;
-      case 'talk': talk(s, c.id); break;
       case 'planRaid':
         this.raidWho = c.id;
         this.view = 'map';
@@ -109,26 +122,38 @@ export class ShelterUi {
         const who = this.availableForRaid(s).find((v) => v.id === this.raidWho) ?? this.availableForRaid(s)[0];
         if (!who) {
           this.error = 'Ninguém disponível para entrar agora.';
-          break;
+          this.hooks.changed();
+          return;
         }
         this.hooks.startRaid(who.id, this.selected);
         return;
       }
       case 'takeOver': this.hooks.takeOver(c.expId); return;
-      case 'delegate': delegateEmergency(s, c.expId); break;
-      case 'build': this.error = startProject(s, c.recipe) ?? ''; break;
-      case 'cancelBuild': cancelProject(s); break;
-      case 'dilemma': resolveDilemma(s, c.id, c.option); break;
-      case 'send':
-        this.error = sendExpedition(s, this.selected, [...this.exp.ids], this.exp.risk) ?? '';
-        if (!this.error) this.exp.ids.clear();
-        break;
-      case 'cancelExp': cancelExpedition(s, c.id); break;
-      case 'ration': setRationing(s, c.on); break;
-      case 'speed': this.hooks.setSpeed(c.value); break;
       case 'skip': this.hooks.skip(c.hours); return;
+      case 'link': {
+        const input = this.hud.querySelector<HTMLInputElement>('input[name=email]');
+        const email = input?.value.trim() ?? '';
+        if (!/^[^@s]+@[^@s]+.[^@s]+$/.test(email)) {
+          this.notice = 'Digite um e-mail válido.';
+          this.hooks.changed();
+          return;
+        }
+        void this.hooks.linkEmail(email).then((msg) => {
+          this.notice = msg;
+          this.hooks.changed();
+        });
+        return;
+      }
+      case 'task': return send({ type: 'task', id: c.id, task: c.task });
+      case 'talk': return send({ type: 'talk', id: c.id });
+      case 'delegate': return send({ type: 'delegate', expId: c.expId });
+      case 'build': return send({ type: 'build', recipe: c.recipe });
+      case 'cancelBuild': return send({ type: 'cancelBuild' });
+      case 'dilemma': return send({ type: 'dilemma', id: c.id, option: c.option });
+      case 'send': return send({ type: 'send', locationId: this.selected, ids: [...this.exp.ids], risk: this.exp.risk });
+      case 'cancelExp': return send({ type: 'cancelExp', id: c.id });
+      case 'ration': return send({ type: 'ration', on: c.on });
     }
-    this.hooks.changed();
   }
 
   private availableForRaid(s: ShelterState): ShelterSurvivor[] {
@@ -151,8 +176,8 @@ export class ShelterUi {
 
   private header(s: ShelterState): string {
     const night = isNight(hourOfDay(s.hour));
-    const speed = this.hooks.speed();
     const alerts = pendingEmergencies(s).length;
+    const acc = this.hooks.account();
     return `
       <div class="tabs">
         ${cmdBtn('🏠 Abrigo', { cmd: 'view', view: 'shelter' }, this.view === 'shelter' ? 'tab active' : 'tab')}
@@ -160,9 +185,8 @@ export class ShelterUi {
       </div>
       <div class="card">
         <div class="row"><span class="name">${night ? '🌙' : '☀️'} ${clock(s.hour)}</span><span>${s.raining ? '🌧️ chuva' : ''}</span></div>
-        <div class="row small muted"><span>1 dia de jogo = 12h reais</span>
-          <span class="actions">${[1, 60, 600].map((v) => cmdBtn(`${v}×`, { cmd: 'speed', value: v }, v === speed ? 'primary' : '')).join('')}
-          ${cmdBtn('+1h', { cmd: 'skip', hours: 1 })}${cmdBtn('+6h', { cmd: 'skip', hours: 6 })}</span></div>
+        <div class="row small muted"><span>${acc.online ? '☁️ online' : '💾 offline'} · 1 dia = 12h reais</span>
+          <span class="actions" title="Ferramentas de teste">${cmdBtn('+1h', { cmd: 'skip', hours: 1 })}${cmdBtn('+6h', { cmd: 'skip', hours: 6 })}</span></div>
       </div>`;
   }
 
@@ -255,7 +279,19 @@ export class ShelterUi {
         ${this.expeditionList(s) || '<div class="small muted">Nenhuma planejada.</div>'}
         <div class="actions" style="margin-top:6px">${cmdBtn('🗺️ Planejar no mapa', { cmd: 'view', view: 'map' })}</div>
       </div>
-      <div class="card"><h3>Bancada</h3>${project}<div class="recipes">${recipes}</div></div>`;
+      <div class="card"><h3>Bancada</h3>${project}<div class="recipes">${recipes}</div></div>
+      ${this.accountCard()}`;
+  }
+
+  private accountCard(): string {
+    const acc = this.hooks.account();
+    let body: string;
+    if (!acc.online) body = '<div class="small muted">Modo offline: o abrigo fica salvo só neste navegador.</div>';
+    else if (!acc.anonymous && acc.email) body = `<div class="small">Salvo na conta <strong>${acc.email}</strong>.</div>`;
+    else
+      body = `<div class="small muted" style="margin-bottom:6px">Você está jogando como anônimo. Vincule um e-mail para não perder o abrigo se trocar de aparelho.</div>
+        <div class="row"><input name="email" type="email" placeholder="seu@email.com" autocomplete="email"/>${cmdBtn('Vincular', { cmd: 'link' })}</div>`;
+    return `<div class="card"><h3>Conta</h3>${body}${this.notice ? `<div class="small warn" style="margin-top:6px">${this.notice}</div>` : ''}</div>`;
   }
 
   private mapView(s: ShelterState): string {
@@ -301,13 +337,13 @@ export class ShelterUi {
 
   private survivorCard(s: ShelterState, v: ShelterSurvivor): string {
     const emo = emotionOf(v.mood);
-    const away = v.status === 'away';
+    const away = v.status === 'away' || v.status === 'raid';
     const booked = v.expeditionId !== null;
     const eff = workEfficiency(v);
     const talked = v.talkedDay === dayOf(s.hour);
     return `<div class="survivor-card">
       <div class="row"><strong>${v.name}</strong>
-        <span class="small ${EMOTION_CLASS[emo]}">${away ? '<span class="warn">em expedição</span>' : `${EMOTION_LABEL[emo]}${v.sick ? ' · <span class="bad">doente</span>' : ''}${booked ? ' · <span class="warn">sai à noite</span>' : ''}`}</span></div>
+        <span class="small ${EMOTION_CLASS[emo]}">${away ? `<span class="warn">${v.status === 'raid' ? 'em incursão' : 'em expedição'}</span>` : `${EMOTION_LABEL[emo]}${v.sick ? ' · <span class="bad">doente</span>' : ''}${booked ? ' · <span class="warn">sai à noite</span>' : ''}`}</span></div>
       <div class="chips">${v.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}" title="${TRAITS[t].description}">${TRAITS[t].name}</span>`).join('')}</div>
       <div class="stats">
         ${stat('Saúde', v.health, false)}${stat('Humor', v.mood, false)}
