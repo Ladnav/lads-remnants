@@ -362,3 +362,36 @@ select {
     width: 100%;
   }
 }
+
+/* ---------- Fase 3: abas, emergências ---------- */
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px;
+  font-size: 13px;
+}
+
+.tab.active {
+  background: var(--panel);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.card.alert {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 1px var(--bad) inset;
+}
+
+.card.alert p {
+  margin: 4px 0 8px;
+  line-height: 1.4;
+}
+
+.res.good {
+  color: var(--good);
+}

@@ -1,5 +1,5 @@
 import { ITEMS, type ItemId } from '../../data/items';
-import { ITEM_TO_RESOURCES, LOCATIONS, RECIPES, RESOURCES, type RecipeId, type ResourceId, type TaskId } from '../../data/shelter';
+import { ITEM_TO_RESOURCES, LOCATIONS, RECIPES, RESOURCES, locationById, type RecipeId, type ResourceId, type TaskId } from '../../data/shelter';
 import { SURVIVORS } from '../../data/survivors';
 import { chance, pick, randInt } from '../rng';
 import {
@@ -69,10 +69,42 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
     banditThreat: 0,
     usedRecruits: [],
     nextId: 1,
+    discovered: LOCATIONS.filter((l) => l.known).map((l) => l.id),
+    seenResources: null,
+    seenAlive: [],
   };
   log(s, 'Dia 1. Uma casa de dois andares com muro alto. Três pessoas, pouca água, nenhum plano.');
   log(s, 'Comece pela bancada: sem ela, quase nada se constrói.');
   return s;
+}
+
+/** Saves antigos não têm os campos da Fase 3. */
+export function migrate(s: ShelterState): ShelterState {
+  s.discovered ??= LOCATIONS.filter((l) => l.known).map((l) => l.id);
+  s.seenResources ??= null;
+  s.seenAlive ??= [];
+  for (const e of s.expeditions) e.emergency ??= null;
+  return s;
+}
+
+/** O jogador está olhando: guarda a foto para o saldo do próximo relatório. */
+export function markSeen(s: ShelterState): void {
+  s.lastSeenHour = s.hour;
+  s.seenResources = { ...s.resources };
+  s.seenAlive = aliveSurvivors(s).map((v) => v.id);
+}
+
+/** Um mapa rabiscado revela o próximo local desconhecido. Devolve o nome, ou null se todos já são conhecidos. */
+export function revealLocation(s: ShelterState): string | null {
+  const next = LOCATIONS.find((l) => !s.discovered.includes(l.id));
+  if (!next) return null;
+  s.discovered.push(next.id);
+  log(s, `🗺️ O mapa rabiscado mostra o caminho até ${next.name}. Agora dá para mandar gente para lá.`, 'good');
+  return next.name;
+}
+
+export function hasUndiscovered(s: ShelterState): boolean {
+  return LOCATIONS.some((l) => !s.discovered.includes(l.id));
 }
 
 export function isGameOver(s: ShelterState): boolean {
@@ -399,24 +431,27 @@ export interface RaidOutcome {
   kills: number;
 }
 
-export function applyRaidResult(s: ShelterState, id: string, r: RaidOutcome): void {
+export function applyRaidResult(s: ShelterState, id: string, r: RaidOutcome, locationId = 'market'): void {
   const v = s.survivors.find((x) => x.id === id);
   if (!v || v.status !== 'home') return;
+  const loc = locationById(locationId);
   if (r.status === 'dead') {
-    die(s, v, `${v.name} entrou no Mercado Bom Preço e não saiu mais.`);
+    die(s, v, `${v.name} entrou em ${loc.name} e não saiu mais.`);
     return;
   }
-  for (const it of r.items) addResources(s, ITEM_TO_RESOURCES[it]);
-  s.locationStock.market = Math.max(10, s.locationStock.market - r.items.length * 3);
+  const loot = r.items.filter((it) => it !== 'map_note');
+  for (const it of loot) addResources(s, ITEM_TO_RESOURCES[it]);
+  s.locationStock[loc.id] = Math.max(10, (s.locationStock[loc.id] ?? 100) - loot.length * 3);
   v.health = clamp(v.health - r.hpLost * 25);
   v.fatigue = clamp(v.fatigue + 20);
-  const value = r.items.reduce((sum, it) => sum + ITEMS[it].value, 0);
+  const value = loot.reduce((sum, it) => sum + ITEMS[it].value, 0);
   if (value >= 10) changeMood(s, 4);
   log(
     s,
-    r.items.length
-      ? `${v.name} voltou do mercado com ${summarize(r.items)}.${r.hpLost ? ' Ferido(a).' : ''}`
-      : `${v.name} voltou do mercado sem nada.`,
-    r.items.length ? 'good' : 'warn',
+    loot.length
+      ? `${v.name} voltou de ${loc.name} com ${summarize(loot)}.${r.hpLost ? ' Ferido(a).' : ''}`
+      : `${v.name} voltou de ${loc.name} sem nada.`,
+    loot.length ? 'good' : 'warn',
   );
+  if (r.items.includes('map_note')) revealLocation(s);
 }

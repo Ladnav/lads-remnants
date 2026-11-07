@@ -69,7 +69,12 @@ export class ShelterScene extends Phaser.Scene {
     this.onReady = onReady;
   }
 
+  /** Verdadeiro entre o create() e o shutdown da cena: só então dá para desenhar. */
+  ready = false;
+
   create(): void {
+    this.ready = true;
+    this.events.once('shutdown', () => (this.ready = false));
     this.sprites.clear();
     this.stationIcons = [];
     this.gfx = this.add.graphics();

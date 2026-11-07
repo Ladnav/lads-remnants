@@ -10,6 +10,7 @@ import {
   computeVisible,
   createRaid,
   exitAt,
+  type RaidOptions,
   exitStatus,
   hasCrowbar,
   hasTrait,
@@ -44,13 +45,19 @@ export class RaidUi {
     return this.state !== null;
   }
 
-  begin(def: SurvivorDef, hp: number, onDone: (o: RaidOutcome) => void): void {
+  begin(def: SurvivorDef, opts: RaidOptions, onDone: (o: RaidOutcome) => void): void {
     this.onDone = onDone;
-    this.state = createRaid((Math.random() * 2 ** 31) | 0, def, hp);
-    this.log = [
-      { text: `${def.name} entra no Mercado Bom Preço. Silêncio… por enquanto.`, tone: 'info' },
-      { text: 'Ache suprimentos e volte. A escada do telhado abre no turno 12.', tone: 'info' },
-    ];
+    const s = (this.state = createRaid((Math.random() * 2 ** 31) | 0, def, opts));
+    const roof = s.exits.find((e) => e.id === 'roof');
+    this.log = s.emergency
+      ? [
+          { text: `${def.name} está encurralado(a) em ${s.site}. Os mortos já sabem que tem alguém aqui.`, tone: 'bad' },
+          { text: `Saia vivo(a). A escada do telhado abre no turno ${roof?.opensAt}.`, tone: 'warn' },
+        ]
+      : [
+          { text: `${def.name} entra em ${s.site}. Silêncio… por enquanto.`, tone: 'info' },
+          { text: `Ache suprimentos e volte. A escada do telhado abre no turno ${roof?.opensAt}.`, tone: 'info' },
+        ];
   }
 
   render(): void {
@@ -116,7 +123,7 @@ export class RaidUi {
         <p>${
           escaped
             ? `Trouxe: ${items}.<br/>Valor: <strong>${lootValue(s.backpack)}</strong> · Ferimentos: <strong class="${wounds ? 'warn' : ''}">${wounds}</strong> · Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}`
-            : `Ficou no mercado, junto com ${items}. Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}.<br/>Essa perda é permanente.`
+            : `Ficou em ${s.site}, junto com ${items}. Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}.<br/>Essa perda é permanente.`
         }</p>
         <div class="actions"><button class="primary" id="raid-done">Voltar ao abrigo</button></div>
         <p style="font-size:11px">Semente ${s.seed} · ${s.log.length} ações registradas.</p>

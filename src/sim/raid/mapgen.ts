@@ -1,4 +1,4 @@
-import { CONTAINERS } from '../../data/items';
+import { CONTAINERS, type ItemId } from '../../data/items';
 import { chance, pick, randInt, type RngState } from '../rng';
 import { DIRS, bfsDistances, idx, isWalkableForPath, type GridLike } from './grid';
 import type { Container, DoorState, Exit, Tile, Vec, Zombie } from './types';
@@ -27,16 +27,24 @@ export interface GeneratedMap {
 export const ROOF_OPENS_AT = 12;
 export const ROOF_CLOSES_AT = 28;
 
-/** Gera um "mercado" abandonado: salas por BSP, portas (algumas trancadas), containers e zumbis. */
-export function generateMarket(r: RngState): GeneratedMap {
+export interface SiteOptions {
+  /** Loot típico do local; metade dos itens vem daqui, metade do tipo de container. */
+  loot?: readonly ItemId[];
+  zombies?: [number, number];
+  /** Esconde um mapa rabiscado num container (revela um novo local no abrigo). */
+  mapNote?: boolean;
+}
+
+/** Gera um prédio abandonado: salas por BSP, portas (algumas trancadas), containers e zumbis. */
+export function generateSite(r: RngState, opts: SiteOptions = {}): GeneratedMap {
   for (let attempt = 0; attempt < 100; attempt++) {
-    const map = tryGenerate(r);
+    const map = tryGenerate(r, opts);
     if (map) return map;
   }
   throw new Error('Falha ao gerar o mapa');
 }
 
-function tryGenerate(r: RngState): GeneratedMap | null {
+function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
   const width = MAP_W;
   const height = MAP_H;
   const tiles: Tile[] = Array.from({ length: width * height }, (_, i) => {
@@ -71,7 +79,7 @@ function tryGenerate(r: RngState): GeneratedMap | null {
       if (neighbours.some((n) => n.kind === 'door' || n.kind === 'exit' || n.containerId !== undefined)) continue;
       const def = pick(r, CONTAINERS);
       const count = randInt(r, def.min, def.max);
-      const items = Array.from({ length: count }, () => pick(r, def.loot));
+      const items = Array.from({ length: count }, () => pick(r, opts.loot && chance(r, 0.5) ? opts.loot : def.loot));
       const id = containers.length;
       containers.push({ id, pos: { x, y }, name: def.name, searched: false, items });
       t.containerId = id;
@@ -127,11 +135,20 @@ function tryGenerate(r: RngState): GeneratedMap | null {
 
   const zombieSpots = freeFloor(8);
   const zombies: Zombie[] = [];
-  const zCount = randInt(r, 4, 6);
+  const [zMin, zMax] = opts.zombies ?? [4, 6];
+  const zCount = randInt(r, zMin, zMax);
   for (let tries = 0; tries < 50 && zombies.length < zCount; tries++) {
     const p = pick(r, zombieSpots);
     if (zombies.some((z) => z.pos.x === p.x && z.pos.y === p.y)) continue;
     zombies.push({ id: zombies.length, pos: p, hp: 2, state: 'idle', target: null, moveAcc: 0 });
+  }
+
+  if (opts.mapNote) {
+    // Fica num dos containers mais fundos do prédio: achar o caminho custa risco.
+    const deep = [...containers].sort(
+      (a, b) => Math.abs(b.pos.x - start.x) + Math.abs(b.pos.y - start.y) - (Math.abs(a.pos.x - start.x) + Math.abs(a.pos.y - start.y)),
+    );
+    pick(r, deep.slice(0, 3)).items.push('map_note');
   }
 
   return { width, height, tiles, containers, zombies, exits, spawns, start };

@@ -12,7 +12,7 @@ import {
   manhattan,
   tileAt,
 } from './grid';
-import { generateMarket } from './mapgen';
+import { generateSite, type SiteOptions } from './mapgen';
 import type { Action, Container, EventTone, Noise, RaidEvent, RaidState, Vec, Zombie } from './types';
 
 export const VIEW_RADIUS = 7;
@@ -32,11 +32,21 @@ const NOISE = {
   bash: 3,
 } as const;
 
-export function createRaid(seed: number, def: SurvivorDef, startHp = def.maxHp): RaidState {
+export interface RaidOptions extends SiteOptions {
+  site?: string;
+  startHp?: number;
+  /** Expedição em apuros: a horda já está acordada e vindo. */
+  emergency?: boolean;
+}
+
+export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {}): RaidState {
   const r: RngState = { rng: seed | 0 || 1 };
-  const map = generateMarket(r);
+  const map = generateSite(r, opts);
+  const startHp = opts.startHp ?? def.maxHp;
   const state: RaidState = {
     seed,
+    site: opts.site ?? 'Mercado Bom Preço',
+    emergency: !!opts.emergency,
     rng: r.rng,
     turn: 0,
     width: map.width,
@@ -58,13 +68,25 @@ export function createRaid(seed: number, def: SurvivorDef, startHp = def.maxHp):
     status: 'active',
     log: [],
   };
+  if (opts.emergency) {
+    state.nextSpawnTurn = 3;
+    for (const z of state.zombies) {
+      z.state = 'investigating';
+      z.target = { ...state.player };
+    }
+    const roof = state.exits.find((e) => e.id === 'roof');
+    if (roof) {
+      roof.opensAt = 6;
+      roof.closesAt = 20;
+    }
+  }
   updateSeen(state);
   return state;
 }
 
 /** Reproduz uma incursão inteira a partir da semente e do log de ações (base da validação no servidor). */
-export function replay(seed: number, def: SurvivorDef, actions: readonly Action[]): RaidState {
-  const state = createRaid(seed, def);
+export function replay(seed: number, def: SurvivorDef, actions: readonly Action[], opts: RaidOptions = {}): RaidState {
+  const state = createRaid(seed, def, opts);
   for (const a of actions) applyAction(state, a);
   return state;
 }

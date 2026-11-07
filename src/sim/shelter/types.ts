@@ -35,6 +35,14 @@ export interface Expedition {
   departHour: number;
   returnHour: number;
   departed: boolean;
+  /** Alguém ficou encurralado: o jogador pode assumir o controle até a hora da volta. */
+  emergency: Emergency | null;
+}
+
+export interface Emergency {
+  survivorId: string;
+  /** pending: esperando o jogador · ai: o jogador deixou a IA resolver · played: o jogador jogou a incursão. */
+  state: 'pending' | 'ai' | 'played';
 }
 
 export type VisitorKind = 'beggar' | 'refugee' | 'trader' | 'conman' | 'bandits';
@@ -90,4 +98,9 @@ export interface ShelterState {
   banditThreat: number;
   usedRecruits: string[];
   nextId: number;
+  /** Locais conhecidos no mapa da região. */
+  discovered: string[];
+  /** Foto do abrigo da última vez que o jogador olhou (para o saldo do relatório). */
+  seenResources: Record<ResourceId, number> | null;
+  seenAlive: string[];
 }

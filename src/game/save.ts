@@ -1,3 +1,4 @@
+import { migrate } from '../sim/shelter/shelter';
 import type { ShelterState } from '../sim/shelter/types';
 
 const SAVE_KEY = 'lads-remnants:save:v1';
@@ -9,7 +10,7 @@ export function loadSave(): ShelterState | null {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as ShelterState;
-    return s.version === 1 ? s : null;
+    return s.version === 1 ? migrate(s) : null;
   } catch {
     return null;
   }

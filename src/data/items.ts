@@ -9,7 +9,8 @@ export type ItemId =
   | 'ammo'
   | 'fuel'
   | 'crowbar'
-  | 'components';
+  | 'components'
+  | 'map_note';
 
 export interface ItemDef {
   name: string;
@@ -30,6 +31,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   fuel: { name: 'Combustível', weight: 3, value: 6, icon: '⛽' },
   crowbar: { name: 'Pé de cabra', weight: 2, value: 4, icon: '🔧' },
   components: { name: 'Componentes eletrônicos', weight: 1, value: 8, icon: '📟' },
+  map_note: { name: 'Mapa rabiscado', weight: 0, value: 0, icon: '🗺️' },
 };
 
 export interface ContainerDef {

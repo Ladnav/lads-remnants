@@ -62,6 +62,9 @@ export type RaidStatus = 'active' | 'extracted' | 'dead';
 
 export interface RaidState {
   seed: number;
+  /** Nome do local, para a interface. */
+  site: string;
+  emergency: boolean;
   rng: number;
   turn: number;
   width: number;
