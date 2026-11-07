@@ -1,250 +1,152 @@
 import Phaser from 'phaser';
-import { ITEMS } from './data/items';
-import { SURVIVORS, TRAITS, type SurvivorDef } from './data/survivors';
 import { RaidScene, TILE } from './game/RaidScene';
-import { chebyshev, idx, manhattan } from './sim/raid/grid';
+import { RaidUi } from './game/raidUi';
+import { ShelterScene } from './game/ShelterScene';
+import { ShelterUi, clock, diaryHtml } from './game/shelterUi';
+import { clearSave, loadSave, loadSpeed, saveGame, saveSpeed } from './game/save';
 import { MAP_H, MAP_W } from './sim/raid/mapgen';
-import {
-  adjacentContainers,
-  adjacentLockedDoors,
-  applyAction,
-  capacity,
-  carriedWeight,
-  computeVisible,
-  createRaid,
-  exitAt,
-  exitStatus,
-  hasCrowbar,
-  hasTrait,
-  lootValue,
-} from './sim/raid/raid';
-import type { Action, RaidEvent, RaidState, Vec } from './sim/raid/types';
+import { REAL_MS_PER_GAME_HOUR, dayOf } from './sim/shelter/core';
+import { advanceTo, applyRaidResult, createShelter, isGameOver, raidHp, tickHour } from './sim/shelter/shelter';
+import type { ShelterState } from './sim/shelter/types';
 
 const hud = document.getElementById('hud')!;
 const overlay = document.getElementById('overlay')!;
+const hint = document.getElementById('hint')!;
 
-let state: RaidState | null = null;
-let survivorDef: SurvivorDef = SURVIVORS[0];
-let log: RaidEvent[] = [];
+let shelter: ShelterState = loadSave() ?? createShelter((Math.random() * 2 ** 31) | 0, Date.now());
+let speed = loadSpeed();
+let mode: 'shelter' | 'raid' = 'shelter';
 
-const scene = new RaidScene(() => showStart());
-new Phaser.Game({
+const msPerHour = () => REAL_MS_PER_GAME_HOUR / speed;
+
+const shelterScene = new ShelterScene(() => renderShelter());
+const raidScene = new RaidScene(() => raidUi.render());
+
+const shelterUi = new ShelterUi(hud, {
+  changed: () => {
+    saveGame(shelter);
+    renderShelter();
+  },
+  startRaid,
+  setSpeed: (v) => {
+    advanceTo(shelter, Date.now(), msPerHour());
+    speed = v;
+    shelter.lastRealMs = Date.now();
+    saveSpeed(v);
+  },
+  skip: (hours) => {
+    for (let i = 0; i < hours && !isGameOver(shelter); i++) tickHour(shelter);
+    saveGame(shelter);
+    renderShelter();
+  },
+  speed: () => speed,
+});
+const raidUi = new RaidUi(raidScene, hud, overlay);
+
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: MAP_W * TILE,
   height: MAP_H * TILE,
   backgroundColor: '#0a0908',
   pixelArt: true,
-  scene,
+  scene: [],
+  callbacks: {
+    postBoot: (g) => {
+      g.scene.add('raid', raidScene, false);
+      g.scene.add('shelter', shelterScene, false);
+      boot();
+    },
+  },
 });
 
-function startRaid(def: SurvivorDef): void {
-  survivorDef = def;
-  const seed = (Math.random() * 2 ** 31) | 0;
-  state = createRaid(seed, def);
-  log = [
-    { text: `${def.name} entra no Mercado Bom Preço. Silêncio… por enquanto.`, tone: 'info' },
-    { text: 'Ache suprimentos e saia viva(o). A escada do telhado abre no turno 12.', tone: 'info' },
-  ];
-  overlay.classList.add('hidden');
-  render();
+function boot(): void {
+  // O que aconteceu enquanto a aba esteve fechada.
+  const seenBefore = shelter.lastSeenHour;
+  advanceTo(shelter, Date.now(), msPerHour());
+  saveGame(shelter);
+  shelterUi.attach(shelter);
+  game.scene.start('shelter');
+  if (shelter.hour > seenBefore) showReport(seenBefore);
+  else if (isGameOver(shelter)) showGameOver();
 }
 
-function act(action: Action): void {
-  if (!state || state.status !== 'active') return;
-  const events = applyAction(state, action);
-  log.push(...events);
-  render();
-  if (state.status !== 'active') setTimeout(showEnd, 700);
+function renderShelter(): void {
+  if (mode !== 'shelter') return;
+  shelter.lastSeenHour = shelter.hour;
+  hint.textContent = 'Defina tarefas, construa, mande expedições à noite. A comunidade segue viva com a aba fechada.';
+  shelterScene.draw(shelter);
+  shelterUi.render();
 }
 
-function render(): void {
-  if (!state) return;
-  scene.draw(state);
-  renderHud(state);
-}
+setInterval(() => {
+  const passed = advanceTo(shelter, Date.now(), msPerHour());
+  if (!passed) return;
+  saveGame(shelter);
+  if (isGameOver(shelter)) showGameOver();
+  renderShelter();
+}, 1000);
 
-scene.setTileClickHandler((p: Vec) => {
-  if (!state || state.status !== 'active') return;
-  const c = state.containers.find((k) => k.pos.x === p.x && k.pos.y === p.y);
-  if (c && chebyshev(c.pos, state.player) === 1 && !c.searched) return act({ type: 'search', containerId: c.id });
-  if (manhattan(p, state.player) === 1) act({ type: 'move', dx: p.x - state.player.x, dy: p.y - state.player.y });
-  else if (p.x === state.player.x && p.y === state.player.y) act({ type: 'wait' });
-});
+function startRaid(id: string): void {
+  const v = shelter.survivors.find((x) => x.id === id);
+  if (!v || v.status !== 'home') return;
+  mode = 'raid';
+  shelterUi.detach();
+  hint.textContent = 'Setas/WASD mover · andar até uma porta abre · andar até um zumbi ataca · E procurar · Espaço esperar · X extrair';
+  raidUi.begin({ id: v.id, name: v.name, bio: v.bio, traits: v.traits, maxHp: 3 }, raidHp(v), (outcome) => {
+    applyRaidResult(shelter, id, outcome);
+    saveGame(shelter);
+    mode = 'shelter';
+    shelterUi.attach(shelter);
+    game.scene.stop('raid');
+    game.scene.start('shelter');
+    if (isGameOver(shelter)) showGameOver();
+  });
+  game.scene.stop('shelter');
+  game.scene.start('raid');
+}
 
 window.addEventListener('keydown', (e) => {
-  if (!state || state.status !== 'active' || !overlay.classList.contains('hidden')) return;
-  const moves: Record<string, [number, number]> = {
-    ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1],
-    ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0],
-  };
-  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (moves[k]) {
-    e.preventDefault();
-    act({ type: 'move', dx: moves[k][0], dy: moves[k][1] });
-  } else if (k === ' ') {
-    e.preventDefault();
-    act({ type: 'wait' });
-  } else if (k === 'e') {
-    const c = adjacentContainers(state).find((x) => !x.searched);
-    if (c) act({ type: 'search', containerId: c.id });
-  } else if (k === 'x') {
-    act({ type: 'extract' });
-  } else if (k === 'p' || k === 'f') {
-    const door = adjacentLockedDoors(state)[0];
-    if (door) act({ type: k === 'p' ? 'pick' : 'force', x: door.x, y: door.y });
-  } else if (k === 'b') {
-    const i = state.backpack.indexOf('bandage');
-    if (i >= 0) act({ type: 'use', index: i });
-  }
+  if (mode === 'raid') raidUi.key(e);
 });
 
-hud.addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest('button[data-action]') as HTMLButtonElement | null;
-  if (!btn) return;
-  act(JSON.parse(btn.dataset.action!) as Action);
-  (document.activeElement as HTMLElement | null)?.blur();
-});
-
-function btn(label: string, action: Action, cls = ''): string {
-  return `<button class="${cls}" data-action='${JSON.stringify(action)}'>${label}</button>`;
-}
-
-function renderHud(s: RaidState): void {
-  const sv = s.survivor;
-  const hearts = '♥'.repeat(sv.hp) + '<span class="muted">' + '♡'.repeat(sv.maxHp - sv.hp) + '</span>';
-  const weight = carriedWeight(s);
-  const cap = capacity(s);
-  const nextWave = Math.max(0, s.nextSpawnTurn - s.turn);
-
-  const exits = s.exits
-    .map((e) => {
-      const st = exitStatus(s, e.id);
-      const label =
-        st === 'open'
-          ? `<span class="good">aberta${e.closesAt !== null ? ` até o turno ${e.closesAt}` : ''}</span>`
-          : st === 'soon'
-            ? `<span class="warn">abre no turno ${e.opensAt}</span>`
-            : '<span class="bad">perdida</span>';
-      return `<div class="row"><span>${e.name}</span>${label}</div>`;
-    })
-    .join('');
-
-  const actions: string[] = [btn('Esperar [Espaço]', { type: 'wait' })];
-  const here = exitAt(s, s.player);
-  if (here && exitStatus(s, here.id) === 'open') actions.unshift(btn(`Extrair pela ${here.name.toLowerCase()} [X]`, { type: 'extract' }, 'primary'));
-  for (const d of adjacentLockedDoors(s)) {
-    actions.push(btn(`Abrir fechadura [P] · ${hasTrait(s, 'mecanico') ? '1' : '3'} turnos`, { type: 'pick', x: d.x, y: d.y }));
-    actions.push(btn(`Forçar porta [F] · ${hasCrowbar(s) ? 'barulho' : 'MUITO barulho'}`, { type: 'force', x: d.x, y: d.y }));
-  }
-  const bandage = s.backpack.indexOf('bandage');
-  if (bandage >= 0 && sv.hp < sv.maxHp) actions.push(btn('Curativo [B]', { type: 'use', index: bandage }));
-
-  const near = adjacentContainers(s);
-  const containers = near.length
-    ? near
-        .map((c) => {
-          if (!c.searched) {
-            return `<div class="row"><span>${c.name}</span>${btn('Procurar [E] · 2 turnos', { type: 'search', containerId: c.id })}</div>`;
-          }
-          const items = c.items.length
-            ? c.items
-                .map((it, i) => {
-                  const fits = weight + ITEMS[it].weight <= cap;
-                  return `<div class="row"><span>${ITEMS[it].icon} ${ITEMS[it].name} <span class="muted">${ITEMS[it].weight}kg</span></span>${fits ? btn('Pegar', { type: 'take', containerId: c.id, index: i }) : '<span class="muted">pesado</span>'}</div>`;
-                })
-                .join('')
-            : '<div class="row muted">vazio</div>';
-          return `<div class="row"><strong>${c.name}</strong></div>${items}`;
-        })
-        .join('')
-    : '<div class="muted" style="font-size:12px">Nada por perto. Containers com ponto amarelo ainda não foram vasculhados.</div>';
-
-  const pack = s.backpack.length
-    ? s.backpack
-        .map(
-          (it, i) =>
-            `<div class="row"><span>${ITEMS[it].icon} ${ITEMS[it].name}</span>${btn('Largar', { type: 'drop', index: i })}</div>`,
-        )
-        .join('')
-    : '<div class="muted" style="font-size:12px">Vazia.</div>';
-
-  hud.innerHTML = `
-    <div class="card">
-      <div class="row"><span class="name">${sv.name}</span><span class="bad" style="font-size:18px">${hearts}</span></div>
-      <div class="chips">${sv.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}" title="${TRAITS[t].description}">${TRAITS[t].name}</span>`).join('')}</div>
-    </div>
-    <div class="card">
-      <div class="row"><span>Turno</span><strong>${s.turn}</strong></div>
-      <div class="row"><span>Zumbis à vista</span><strong>${countVisibleZombies(s)}</strong></div>
-      <div class="row"><span>Próxima leva da horda</span><strong class="${nextWave <= 2 ? 'bad' : ''}">${nextWave} turnos</strong></div>
-      ${exits}
-    </div>
-    <div class="card"><h3>Ações</h3><div class="actions">${actions.join('')}</div></div>
-    <div class="card"><h3>Por perto</h3>${containers}</div>
-    <div class="card">
-      <h3>Mochila · ${weight}/${cap} kg · valor ${lootValue(s.backpack)}</h3>
-      <div class="bar ${weight >= cap ? 'full' : ''}"><div style="width:${Math.min(100, (weight / cap) * 100)}%"></div></div>
-      ${pack}
-    </div>
-    <div class="card"><h3>Diário</h3><div class="log">${log
-      .slice(-30)
-      .map((e) => `<div class="${e.tone === 'info' ? '' : e.tone}">› ${e.text}</div>`)
-      .join('')}</div></div>
-  `;
-}
-
-function countVisibleZombies(s: RaidState): number {
-  const vis = computeVisible(s);
-  return s.zombies.filter((z) => vis[idx(s, z.pos.x, z.pos.y)]).length;
-}
-
-function showStart(): void {
+function showReport(since: number): void {
+  const entries = shelter.diary.filter((e) => e.hour > since);
+  const hours = shelter.hour - since;
   overlay.innerHTML = `
     <div class="modal">
       <h1>LADS REMNANTS</h1>
-      <p>Dia 41. A água do abrigo acaba em dois dias. O Mercado Bom Preço, a seis quadras, ainda não foi totalmente saqueado — dizem.<br/>
-      Escolha quem vai. Quem morrer lá dentro não volta.</p>
-      <div class="survivors">
-        ${SURVIVORS.map(
-          (s, i) => `
-          <button class="survivor" data-pick="${i}">
-            <span class="name">${s.name}</span>
-            <span class="bio">${s.bio}</span>
-            <span class="chips">${s.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}">${TRAITS[t].name}</span>`).join('')}</span>
-            ${s.traits.map((t) => `<span class="traitdesc">${TRAITS[t].name}: ${TRAITS[t].description}</span>`).join('')}
-          </button>`,
-        ).join('')}
-      </div>
-      <p style="font-size:12px">Dicas: cada passo faz ruído e o ruído atrai zumbis. A horda cresce com o tempo. Forçar portas é rápido, mas acorda o prédio inteiro.</p>
+      <h2>Enquanto você esteve fora</h2>
+      <p>Passaram ${hours} horas no abrigo (${clock(since)} → ${clock(shelter.hour)}).</p>
+      <div class="log report">${entries.length ? diaryHtml(entries.slice(-40)) : '<div class="muted">Nada de importante. Só o silêncio e os gemidos ao longe.</div>'}</div>
+      <div class="actions" style="margin-top:12px"><button class="primary" id="report-ok">Voltar ao abrigo</button></div>
     </div>`;
   overlay.classList.remove('hidden');
-  overlay.querySelectorAll<HTMLButtonElement>('[data-pick]').forEach((b) =>
-    b.addEventListener('click', () => startRaid(SURVIVORS[Number(b.dataset.pick)])),
-  );
+  document.getElementById('report-ok')!.addEventListener('click', () => {
+    overlay.classList.add('hidden');
+    if (isGameOver(shelter)) showGameOver();
+    renderShelter();
+  });
 }
 
-function showEnd(): void {
-  if (!state) return;
-  const s = state;
-  const escaped = s.status === 'extracted';
-  const wounds = s.survivor.maxHp - s.survivor.hp;
-  const items = s.backpack.map((it) => `${ITEMS[it].icon} ${ITEMS[it].name}`).join(', ') || 'nada';
+function showGameOver(): void {
+  if (!overlay.classList.contains('hidden')) return;
+  const lost = shelter.survivors.map((v) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ');
   overlay.innerHTML = `
     <div class="modal">
-      <h2 class="${escaped ? 'good' : 'bad'}">${escaped ? `${s.survivor.name} voltou para o abrigo` : `${s.survivor.name} não voltou`}</h2>
-      <p>${
-        escaped
-          ? `Trouxe: ${items}.<br/>Valor: <strong>${lootValue(s.backpack)}</strong> · Ferimentos: <strong class="${wounds ? 'warn' : ''}">${wounds}</strong> · Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}`
-          : `Perdido no mercado, junto com ${items}. Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}.<br/>No jogo completo, essa perda seria permanente.`
-      }</p>
-      <div class="actions">
-        <button class="primary" id="again">Nova incursão com ${survivorDef.name}</button>
-        <button id="choose">Escolher outro sobrevivente</button>
-      </div>
-      <p style="font-size:11px">Semente ${s.seed} · ${s.log.length} ações registradas (base da validação no servidor).</p>
+      <h2 class="bad">A comunidade acabou</h2>
+      <p>Resistiram até o dia ${dayOf(shelter.hour)}. ${lost}.</p>
+      <div class="log report">${diaryHtml(shelter.diary.slice(-15))}</div>
+      <div class="actions" style="margin-top:12px"><button class="primary" id="restart">Começar de novo</button></div>
     </div>`;
   overlay.classList.remove('hidden');
-  document.getElementById('again')!.addEventListener('click', () => startRaid(survivorDef));
-  document.getElementById('choose')!.addEventListener('click', showStart);
+  document.getElementById('restart')!.addEventListener('click', () => {
+    clearSave();
+    shelter = createShelter((Math.random() * 2 ** 31) | 0, Date.now());
+    shelterUi.attach(shelter);
+    overlay.classList.add('hidden');
+    saveGame(shelter);
+    game.scene.stop('shelter');
+    game.scene.start('shelter');
+  });
 }

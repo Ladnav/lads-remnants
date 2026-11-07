@@ -32,7 +32,7 @@ const NOISE = {
   bash: 3,
 } as const;
 
-export function createRaid(seed: number, def: SurvivorDef): RaidState {
+export function createRaid(seed: number, def: SurvivorDef, startHp = def.maxHp): RaidState {
   const r: RngState = { rng: seed | 0 || 1 };
   const map = generateMarket(r);
   const state: RaidState = {
@@ -44,7 +44,7 @@ export function createRaid(seed: number, def: SurvivorDef): RaidState {
     tiles: map.tiles,
     seen: new Array(map.width * map.height).fill(false),
     player: map.start,
-    survivor: { id: def.id, name: def.name, traits: [...def.traits], hp: def.maxHp, maxHp: def.maxHp },
+    survivor: { id: def.id, name: def.name, traits: [...def.traits], hp: Math.min(startHp, def.maxHp), maxHp: def.maxHp },
     backpack: [],
     containers: map.containers,
     zombies: map.zombies,

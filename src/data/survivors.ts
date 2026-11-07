@@ -22,6 +22,15 @@ export interface SurvivorDef {
   maxHp: number;
 }
 
+/** Refugiados que podem bater na porta. */
+export const RECRUITS: readonly Omit<SurvivorDef, 'maxHp'>[] = [
+  { id: 'bruno', name: 'Bruno', bio: 'Motorista de ônibus. Conta piadas ruins para não chorar.', traits: ['forte'] },
+  { id: 'ana', name: 'Ana', bio: 'Professora. Guarda um caderno com o nome de todos que perdeu.', traits: ['silencioso', 'medroso'] },
+  { id: 'caio', name: 'Caio', bio: 'Quinze anos. Diz que tem dezoito.', traits: ['silencioso'] },
+  { id: 'dona_rita', name: 'Dona Rita', bio: 'Costureira aposentada. Não aceita desperdício de nada.', traits: ['mecanico'] },
+  { id: 'teo', name: 'Téo', bio: 'Lutava jiu-jítsu. Hoje luta contra o sono.', traits: ['lutador', 'medroso'] },
+];
+
 export const SURVIVORS: readonly SurvivorDef[] = [
   {
     id: 'marta',

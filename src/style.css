@@ -244,3 +244,121 @@ button.primary {
     width: 100%;
   }
 }
+
+/* ---------- Abrigo ---------- */
+#hud {
+  width: 380px;
+}
+
+.small {
+  font-size: 12px;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button:disabled:hover {
+  border-color: var(--line);
+}
+
+select {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 4px;
+  max-width: 100%;
+}
+
+.card > select {
+  width: 100%;
+  margin: 4px 0;
+}
+
+.resgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 4px;
+}
+
+.res {
+  font-size: 13px;
+  background: var(--panel-2);
+  border-radius: 4px;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.survivor-card {
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.survivor-card:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.stat {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.stat .bar {
+  margin-top: 2px;
+}
+
+.recipes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.recipe {
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+}
+
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.card.door {
+  border-color: var(--warn);
+}
+
+.card.door p {
+  margin: 4px 0 8px;
+  line-height: 1.4;
+}
+
+.log.report {
+  max-height: 50vh;
+  flex-direction: column;
+}
+
+@media (max-width: 720px) {
+  #hud {
+    width: 100%;
+  }
+}
