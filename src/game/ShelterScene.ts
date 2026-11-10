@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 import { TILE, WALL_H, box, enablePan, feet, rowDepth, setupObliqueCamera, wall } from './oblique';
+import { artUrl } from './art';
 import { ensureIcon, iconFor } from './icons';
 import { NightLight, makeRain, type LightSource } from './night';
 import { Actor, survivorLook, type Pose } from './sprites';
@@ -159,6 +160,8 @@ export class ShelterScene extends Phaser.Scene {
   private floor!: Phaser.GameObjects.Graphics;
   private rows: Phaser.GameObjects.Graphics[] = [];
   private night!: NightLight;
+  /** Verdadeiro quando a pintura do abrigo carregou; senão a casa é desenhada por código. */
+  private painted = false;
   private rain!: Phaser.GameObjects.Particles.ParticleEmitter;
   private sprites = new Map<string, Sprite>();
   private decor: Phaser.GameObjects.GameObject[] = [];
@@ -173,6 +176,11 @@ export class ShelterScene extends Phaser.Scene {
     this.onReady = onReady;
   }
 
+  preload(): void {
+    if (!this.textures.exists('shelter-bg')) this.load.image('shelter-bg', artUrl('shelter'));
+    for (const key of PROPS) if (!this.textures.exists(key)) this.load.image(key, artUrl(key));
+  }
+
   create(): void {
     this.ready = true;
     this.events.once('shutdown', () => (this.ready = false));
@@ -182,7 +190,9 @@ export class ShelterScene extends Phaser.Scene {
     setupObliqueCamera(this);
     // No celular começa olhando para a sala, perto da porta.
     enablePan(this, W * TILE, H * TILE, { x: 10 * TILE, y: 12 * TILE });
-    this.floor = this.add.graphics().setDepth(0);
+    this.painted = [...PROPS, 'shelter-bg'].every((k) => this.textures.exists(k) && this.textures.get(k).key !== '__MISSING');
+    if (this.painted) this.buildPainted();
+    this.floor = this.add.graphics().setDepth(1);
     this.rows = Array.from({ length: H }, (_, y) => this.add.graphics().setDepth(rowDepth(y, 5)));
     for (const r of ROOMS) {
       this.add.text(r.at[0] * TILE + 4, r.at[1] * TILE + 3, r.name, { fontFamily: 'monospace', fontSize: '10px', color: '#c9bba3' }).setAlpha(0.55).setDepth(1);
@@ -208,12 +218,89 @@ export class ShelterScene extends Phaser.Scene {
     if (this.rain.emitting !== s.raining) s.raining ? this.rain.start() : this.rain.stop();
   }
 
+  /**
+   * A casa pintada (npm run art -- shelter) foi feita sobre a planta exata do jogo.
+   * O fundo vai inteiro para o chão; as paredes são recortes da mesma imagem, uma faixa
+   * por linha, para as pessoas continuarem passando atrás delas.
+   */
+  private buildPainted(): void {
+    const src = this.textures.get('shelter-bg').getSourceImage();
+    const k = src.width / (W * TILE);
+    const piece = () => this.add.image(0, -WALL_H, 'shelter-bg').setOrigin(0).setDisplaySize(W * TILE, BG_H).setTint(BG_TINT);
+    piece().setDepth(0);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!isWall(x, y)) continue;
+        // Junta os tiles de parede vizinhos da linha num recorte só.
+        let end = x;
+        const front = !isWall(x, y + 1);
+        while (isWall(end + 1, y) && !isWall(end + 1, y + 1) === front) end++;
+        const h = TILE + (front ? WALL_H : 0);
+        piece().setCrop(x * TILE * k, y * TILE * k, (end - x + 1) * TILE * k, h * k).setDepth(rowDepth(y, 5));
+        x = end;
+      }
+    }
+  }
+
+  /** Móvel pintado: base no chão em (cx, baseY), com a largura dada em tiles. */
+  private prop(key: string, cx: number, baseY: number, widthTiles: number, row: number): Phaser.GameObjects.Image {
+    const img = this.add.image(cx, baseY, key).setOrigin(0.5, 1).setDepth(rowDepth(row, 6)).setTint(0xe6dfd2);
+    img.setScale((widthTiles * TILE) / img.width);
+    this.decor.push(img);
+    this.floor.fillStyle(0x000000, 0.4).fillEllipse(cx + 2, baseY - 2, widthTiles * TILE, Math.max(8, widthTiles * TILE * 0.32));
+    return img;
+  }
+
+  private drawPainted(s: ShelterState): void {
+    const f = this.floor;
+    const mark = (px: number, py: number, w: number, h: number) => {
+      f.lineStyle(1, 0xf1ebe0, 0.28).strokeRect(px + 3.5, py + 3.5, w - 7, h - 7);
+      f.lineStyle(1, 0xf1ebe0, 0.16).lineBetween(px + 6, py + 6, px + w - 6, py + h - 6);
+    };
+    const [dx, dy] = FRONT_DOOR;
+    if (s.buildings.barricade > 0) this.prop('prop-barricade', dx * TILE + TILE / 2, dy * TILE - 3, 2 + s.buildings.barricade * 0.45, dy - 1);
+    BED_SLOTS.forEach(([x, y], i) => {
+      if (i < s.buildings.bed) this.prop('prop-bed', x * TILE + TILE / 2, (y + 1) * TILE + 1, 1.15, y);
+    });
+    const station = (p: P, key: string, built: boolean, widthTiles: number) => {
+      if (built) this.prop(key, p[0] * TILE + TILE / 2, (p[1] + 1) * TILE - 2, widthTiles, p[1]);
+      else mark(p[0] * TILE, p[1] * TILE, TILE, TILE);
+    };
+    station(STATIONS.workbench, 'prop-workbench', s.buildings.workbench > 0, 1.9);
+    station(STATIONS.stove, 'prop-stove', s.buildings.stove > 0, 0.95);
+    station(STATIONS.filter, 'prop-filter', s.buildings.filter > 0, 1.05);
+    station(STATIONS.latrine, 'prop-latrine', s.buildings.latrine > 0, 1.25);
+    station(STATIONS.radio, 'prop-radio', s.buildings.radio > 0, 1.3);
+    STATIONS.collectors.forEach((p, i) => station(p, 'prop-collector', i < s.buildings.rainCollector, 1.5));
+    STATIONS.gardens.forEach((p, i) => {
+      const px = p[0] * TILE;
+      const py = p[1] * TILE;
+      if (i < s.buildings.garden) {
+        const bed = this.prop('prop-garden', px + TILE * 1.5, py + TILE * 2 - 2, 3, p[1] + 1);
+        // Horta sem água perde o verde.
+        if (!s.gardenWatered) bed.setTint(0xc9b48a);
+      } else {
+        mark(px, py, TILE * 3, TILE * 2);
+      }
+    });
+    // Depósito: as pilhas crescem com o estoque de comida, água e material.
+    [s.resources.food, s.resources.water, s.resources.wood + s.resources.scrap].forEach((amount, i) => {
+      if (amount < 1) return;
+      this.prop('prop-crates', (9 + i * 3) * TILE, 18 * TILE - 4, 0.75 + Math.min(4, Math.ceil(amount / 4)) * 0.16, 17).setFlipX(i === 1);
+    });
+    if (s.resources.waste > 6) {
+      const n = Math.min(10, Math.floor(s.resources.waste / 2));
+      for (let k = 0; k < n; k++) f.fillStyle(0x2a2718, 0.8).fillEllipse((2 + ((k * 7) % 4)) * TILE + 10, (15 + (k % 3)) * TILE + 14, 12 + (k % 3) * 3, 7);
+    }
+  }
+
   private drawHouse(s: ShelterState): void {
     const f = this.floor;
     f.clear();
     for (const g of this.rows) g.clear();
     for (const o of this.decor) o.destroy();
     this.decor = [];
+    if (this.painted) return this.drawPainted(s);
 
     f.fillStyle(0x0a0908).fillRect(0, -WALL_H, W * TILE, H * TILE + WALL_H);
     for (let y = 0; y < H; y++) {
@@ -477,6 +564,12 @@ export class ShelterScene extends Phaser.Scene {
 }
 
 /** Tiles com móveis construídos (camas, bancadas, hortas, caixotes). */
+const PROPS = ['prop-bed', 'prop-workbench', 'prop-stove', 'prop-filter', 'prop-latrine', 'prop-radio', 'prop-collector', 'prop-garden', 'prop-barricade', 'prop-crates'];
+/** A pintura é 4:3: cobre a cena (574 de altura) e mais uma sobra embaixo. */
+const BG_H = 588;
+/** Escurece um pouco a pintura, que veio clara demais para o tom do jogo. */
+const BG_TINT = 0xb9b2a6;
+
 type Station = 'workbench' | 'stove' | 'filter' | 'latrine' | 'radio' | 'collector';
 
 /**

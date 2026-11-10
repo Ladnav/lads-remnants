@@ -74,11 +74,12 @@ const prop = (id, width, what) => ({ id, aspect: '1:1', width, key: true, shelve
 
 const JOBS = [
   {
+    // Pintura do abrigo sobre a planta exata do jogo (node scripts/art-ref-shelter.mjs).
     id: 'shelter',
     aspect: '4:3',
     width: 1568,
-    refs: ['docs/screenshots/abrigo.png'],
-    prompt: `Repaint the attached floor plan as a finished game background, keeping EXACTLY the same layout: same camera (top-down, tilted three-quarter oblique view), same position and thickness of every wall, same door gaps, same rooms, same proportions, and the garden yard on the right. It is the inside of an old occupied house used as a survivors' shelter, seen with the roof removed. Wooden plank floors, worn and stained; cracked plaster and exposed brick on the walls, with the top face of each wall lighter than its front face; cracked tiles in the small bottom-left room; trampled earth and weeds in the yard. Remove all people, all text labels, all icons and all furniture: empty rooms only, with just dirt, stains, scattered debris and soft shadows at the base of the walls. Daylight, overcast, flat even lighting from above (lights are added later by the game). ${STYLE}`,
+    refs: ['art/ref/shelter-plan.png'],
+    prompt: `The attached image is the exact floor plan of a game level: a house seen from above with its roof removed. Repaint it as a finished, beautiful hand-painted game background, as a pixel-accurate paint-over: every wall, every door gap and every room must stay in exactly the same position, size and proportion as in the plan, and the image must keep the same framing, with the outer walls touching the image edges. Do not rotate, crop, zoom, add perspective, show the outside of the building or add a border. Camera: top-down with a slight oblique tilt, exactly as drawn. The light beige shapes are the flat tops of thick masonry walls: paint them as worn cement and plaster with a few chipped spots, clearly lighter than the floors. The darker strip under each wall is its front face: paint it as dirty cracked plaster with a little exposed brick, with a soft shadow falling on the floor below it. Floors by colour in the plan: brown areas are old wooden floorboards, worn and stained; pale grey areas are cracked dirty ceramic tiles; mid grey areas are stained bare concrete; the green area on the right is a backyard of trampled earth, dry grass and weeds. The small brown rectangle at the bottom is the wooden front door. Rooms are EMPTY: no furniture, no objects, no people, no rugs, no candles, no lamps, no fire, no text, no symbols. Only floor wear: stains, scratches, dust, a few leaves and small debris. Flat, even, overcast daylight from above with no light pools, so the game can add its own lighting. ${STYLE}`,
   },
   // Sobreviventes
   face('marta', 'Marta, a Brazilian woman around 40, a former electrician: lean, brown skin, dark hair tied back, deep-set sleepless eyes, mustard-yellow work shirt'),

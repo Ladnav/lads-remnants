@@ -329,6 +329,15 @@
       "textTokens": 534,
       "imageTokens": 1120,
       "usd": 0.142
+    },
+    {
+      "at": "2026-11-10T23:22:58.818Z",
+      "job": "shelter",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 687,
+      "textTokens": 521,
+      "imageTokens": 1120,
+      "usd": 0.142
     }
   ]
 }
