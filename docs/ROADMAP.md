@@ -25,7 +25,7 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
 - [x] **Mapa da região no nível do abrigo.** Em `src/game/RegionScene.ts`: sombra na base dos
   prédios, variação nas ruas e quadras, noite com focos de luz usando `src/game/night.ts`,
   chuva quando `s.raining`.
-- [ ] **Incursão no nível do abrigo.** Em `src/game/RaidScene.ts`: variação do piso por tile,
+- [x] **Incursão no nível do abrigo.** Em `src/game/RaidScene.ts`: variação do piso por tile,
   sombra na base das paredes, luz ao redor do sobrevivente no lugar da névoa chapada.
 - [ ] **Tela do grupo.** Uma visão geral dos personagens: grade de retratos grandes com nome,
   estado e tarefa, abrindo a ficha (`showProfile` em `src/main.ts`) ao clicar. Incluir mortos

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { idx } from '../sim/raid/grid';
 import { computeVisible, exitStatus } from '../sim/raid/raid';
 import type { RaidState, Tile, Vec } from '../sim/raid/types';
+import { NightLight, type LightSource } from './night';
 import { RES, TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, shade, wall } from './oblique';
 import { Actor, survivorLook, zombieLook } from './sprites';
 
@@ -14,6 +15,9 @@ const CONTAINER_COLOR: Record<string, number> = {
   Armário: 0x5a6a7a,
 };
 
+/** Número estável por tile, para variar o chão sem sortear a cada desenho. */
+const spot = (x: number, y: number): number => (((x * 73856093) ^ (y * 19349663)) >>> 0) % 1000;
+
 /** Desenha o estado da incursão em 3/4. Não guarda regras: só lê o estado e repassa cliques. */
 export class RaidScene extends Phaser.Scene {
   private floor!: Phaser.GameObjects.Graphics;
@@ -22,6 +26,7 @@ export class RaidScene extends Phaser.Scene {
   private playerId = 'marta';
   private zombies = new Map<number, Actor>();
   private alerts = new Map<number, Phaser.GameObjects.Text>();
+  private dark: NightLight | null = null;
   private onTileClick: (p: Vec) => void = () => {};
   private onReady: () => void;
 
@@ -37,6 +42,8 @@ export class RaidScene extends Phaser.Scene {
     this.alerts.clear();
     this.floor = this.add.graphics().setDepth(0);
     this.rows = [];
+    this.dark = null;
+    this.time.addEvent({ delay: 170, loop: true, callback: () => this.dark?.flicker() });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.onTileClick({ x: Math.floor(p.worldX / TILE), y: Math.floor(p.worldY / TILE) });
     });
@@ -78,10 +85,23 @@ export class RaidScene extends Phaser.Scene {
         }
 
         if (t.kind !== 'wall') {
-          // Piso de cerâmica velha
-          f.fillStyle((x + y) % 2 ? 0x3a372f : 0x36332b).fillRect(px, py, TILE, TILE);
+          // Piso de cerâmica velha: peças de tons diferentes, trincas, sujeira e o que ficou para trás.
+          const h = spot(x, y);
+          f.fillStyle([0x3a372f, 0x36332b, 0x3d3a31, 0x33302a][h % 4]).fillRect(px, py, TILE, TILE);
           f.lineStyle(1, 0x2a2822, 0.8).strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
-          if ((x * 5 + y * 3) % 11 === 0) f.fillStyle(0x2e2b24).fillEllipse(px + 10, py + 16, 10, 5);
+          f.lineBetween(px + TILE / 2, py, px + TILE / 2, py + TILE).lineBetween(px, py + TILE / 2, px + TILE, py + TILE / 2);
+          if (h % 6 === 0) f.fillStyle(0x2a2721, 0.8).fillEllipse(px + 6 + (h % 15), py + 9 + (h % 12), 12 + (h % 7), 6);
+          if (h % 8 === 0) f.lineStyle(1, 0x211f1a, 0.9).lineBetween(px + (h % 11), py + 3, px + 9 + (h % 13), py + 15).lineBetween(px + 9 + (h % 13), py + 15, px + 6 + (h % 16), py + TILE - 3);
+          if (h % 13 === 0) f.fillStyle(0x4a463c).fillRect(px + 4 + (h % 17), py + 6 + (h % 15), 4, 2).fillRect(px + 9 + (h % 11), py + 14 + (h % 9), 2, 3);
+          if (h % 31 === 0) f.fillStyle(0x4a1c16, 0.75).fillEllipse(px + 14, py + 15, 17, 9).fillCircle(px + 5 + (h % 9), py + 7, 2);
+          // Sombra onde o chão encontra parede ou porta fechada.
+          if (tall(at(x, y - 1))) {
+            f.fillStyle(0x000000, 0.32).fillRect(px, py, TILE, 4);
+            f.fillStyle(0x000000, 0.17).fillRect(px, py + 4, TILE, 5);
+            f.fillStyle(0x000000, 0.07).fillRect(px, py + 9, TILE, 5);
+          }
+          if (tall(at(x - 1, y))) f.fillStyle(0x000000, 0.17).fillRect(px, py, 4, TILE);
+          if (tall(at(x + 1, y))) f.fillStyle(0x000000, 0.17).fillRect(px + TILE - 4, py, 4, TILE);
         }
 
         if (t.kind === 'wall') {
@@ -121,7 +141,21 @@ export class RaidScene extends Phaser.Scene {
           const empty = c.searched && c.items.length === 0;
           const color = empty ? 0x3a3128 : (CONTAINER_COLOR[c.name] ?? 0x6b4f2a);
           const h = c.name === 'Prateleira' || c.name === 'Armário' ? 18 : 11;
+          g.fillStyle(0x000000, 0.3).fillRect(px + 5, py + TILE - 4, TILE - 6, 3);
           box(g, px + 3, py + 6, TILE - 6, TILE - 10, h, color);
+          // O que distingue cada móvel, na frente dele.
+          const front = py + TILE - 4 - h;
+          const line = shade(color, 0.5);
+          if (c.name === 'Prateleira') {
+            g.lineStyle(1, line).lineBetween(px + 4, front + 6, px + TILE - 4, front + 6).lineBetween(px + 4, front + 12, px + TILE - 4, front + 12);
+          } else if (c.name === 'Armário') {
+            g.lineStyle(1, line).lineBetween(px + TILE / 2, front + 2, px + TILE / 2, front + h - 2);
+            g.fillStyle(0xcfc6b0).fillRect(px + TILE / 2 - 3, front + 8, 2, 2).fillRect(px + TILE / 2 + 2, front + 8, 2, 2);
+          } else if (c.name === 'Caixa de ferramentas') {
+            g.fillStyle(0xcfc6b0).fillRect(px + TILE / 2 - 3, front + 3, 6, 2);
+          } else {
+            g.lineStyle(1, line).lineBetween(px + 4, front + 4, px + TILE - 4, front + 4);
+          }
           const topY = py + 6 - h + (TILE - 10) / 2;
           if (!c.searched) g.fillStyle(0xd9b45b).fillCircle(px + TILE / 2, topY, 3);
           else if (c.items.length) g.fillStyle(0xf1ebe0).fillCircle(px + TILE / 2, topY, 3);
@@ -129,13 +163,20 @@ export class RaidScene extends Phaser.Scene {
 
         if (!vis[i]) {
           const raised = tall(t) || t.containerId !== undefined || (t.kind === 'exit' && t.exitId === 'roof');
-          g.fillStyle(0x000000, 0.55).fillRect(px, py - (raised ? WALL_H + 20 : 0), TILE, TILE + (raised ? WALL_H + 20 : 0));
+          g.fillStyle(0x000000, 0.4).fillRect(px, py - (raised ? WALL_H + 20 : 0), TILE, TILE + (raised ? WALL_H + 20 : 0));
         }
       }
     }
 
     this.drawActors(s, vis);
     this.rippleNoises(s, vis);
+
+    // Lá dentro é escuro: a lanterna ilumina em volta de quem entrou, e as saídas abertas deixam luz passar.
+    this.dark ??= new NightLight(this, s.width * TILE, s.height * TILE + WALL_H);
+    const me = feet(s.player.x, s.player.y);
+    const lights: LightSource[] = [{ x: me.x, y: me.y - 8, r: 165 }];
+    for (const e of s.exits) if (exitStatus(s, e.id) === 'open') lights.push({ x: e.pos.x * TILE + TILE / 2, y: e.pos.y * TILE + TILE / 2, r: 60 });
+    this.dark.set(0.6, lights);
   }
 
   private drawActors(s: RaidState, vis: boolean[]): void {
