@@ -113,6 +113,14 @@ const JOBS = [
   prop('prop-garden', 300, 'A wide rectangular raised vegetable bed made of rough planks, about twice as wide as it is deep, filled with dark soil and neat rows of young green vegetable plants.'),
   prop('prop-barricade', 300, 'A long low barricade about three times wider than it is tall: nailed planks, a table on its side, a wardrobe door, sandbags and coils of wire piled together.'),
   prop('prop-crates', 150, 'A small stack of scavenged supplies: two wooden crates, a few cans, a jerrycan and a folded tarp.'),
+  // Mapa da região: pintura por cima da planta que o jogo desenha
+  {
+    id: 'region-map',
+    aspect: '4:3',
+    width: 1568,
+    refs: ['art/ref/region-layout.png'],
+    prompt: `Repaint the attached rough city map as a finished, beautiful hand-painted game map of an abandoned Brazilian neighbourhood, keeping the SAME layout and the same camera: top-down view with a slight oblique tilt so building fronts are just visible, north at the top. Keep the wide river running vertically through the middle with its five small bridges, the regular grid of streets, and the city blocks in the same places. Fill the blocks with dense, varied small buildings: houses with terracotta tile roofs, flat concrete roofs with blue water tanks, corrugated metal roofs, backyards, walls, trees, a small overgrown square, vacant lots. The streets are cracked asphalt with abandoned cars, debris, weeds and fallen wires; the river is dark green water with muddy overgrown banks. Months after a collapse: no people, no lights, no smoke. Remove every label, icon, marker, outline, highlight, question mark, dark cloud and any piece of user interface from the reference: plain buildings in their place. Even soft overcast daylight, the whole map evenly visible, slightly darker toward the edges. ${STYLE}`,
+  },
   // Telas
   scene('title', 'Wide establishing shot of an old two-storey house with a walled yard in a ruined Brazilian neighbourhood at night, one window glowing with candlelight, boarded windows, power lines hanging, dead city skyline far behind under a heavy sky. Dark empty space in the upper third of the image.'),
   scene('door', 'View from inside a dark hallway looking at a barricaded front door of an old house; through a gap in the boards, the silhouettes of strangers wait outside in grey daylight. A hand-made barricade of planks and a chair, a lantern on the floor.'),

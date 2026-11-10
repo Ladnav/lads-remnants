@@ -320,6 +320,15 @@
       "textTokens": 497,
       "imageTokens": 1120,
       "usd": 0.1407
+    },
+    {
+      "at": "2026-11-10T22:25:22.202Z",
+      "job": "region-map",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 575,
+      "textTokens": 534,
+      "imageTokens": 1120,
+      "usd": 0.142
     }
   ]
 }
