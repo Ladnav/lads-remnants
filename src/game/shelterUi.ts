@@ -3,9 +3,9 @@ import { LOCATIONS, RECIPES, RESOURCES, RISK_RULES, TASKS, locationById, type Re
 import { TRAITS } from '../data/survivors';
 import type { Account } from '../net/backend';
 import type { ShelterCommand } from '../server/game';
-import { canAfford, dayOf, describeCost, emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
+import { aliveSurvivors, canAfford, dayOf, describeCost, emotionOf, friendsOf, hourOfDay, isNight, rivalsOf } from '../sim/shelter/core';
 import { pendingEmergencies } from '../sim/shelter/expeditions';
-import { hasUndiscovered, workEfficiency } from '../sim/shelter/shelter';
+import { SIGNAL_HOURS, evacuationNeeds, goalStage, hasUndiscovered, workEfficiency } from '../sim/shelter/shelter';
 import type { DiaryEntry, Emotion, ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 
 export type View = 'shelter' | 'map';
@@ -27,6 +27,7 @@ type Cmd =
   | { cmd: 'standing'; on: boolean }
   | { cmd: 'queue'; recipe: RecipeId }
   | { cmd: 'unqueue'; index: number }
+  | { cmd: 'evacuate' }
   | { cmd: 'skip'; hours: number }
   | { cmd: 'link' };
 
@@ -167,6 +168,7 @@ export class ShelterUi {
         return send({ type: 'standing', order: c.on ? { locationId: this.selected, ids: [...this.exp.ids], risk: this.exp.risk } : null });
       case 'queue': return send({ type: 'queue', recipe: c.recipe });
       case 'unqueue': return send({ type: 'unqueue', index: c.index });
+      case 'evacuate': return send({ type: 'evacuate' });
     }
   }
 
@@ -293,6 +295,7 @@ export class ShelterUi {
       .join('');
 
     return `
+      ${this.goalCard(s)}
       <div class="card"><h3>Recursos</h3><div class="resgrid">${resources}</div>
         <div class="row small" style="margin-top:6px"><label><input type="checkbox" ${s.rationing ? 'checked' : ''} data-cmd='${JSON.stringify({ cmd: 'ration', on: !s.rationing })}'/> Racionar (meia porção, humor cai)</label></div>
       </div>
@@ -303,6 +306,43 @@ export class ShelterUi {
       </div>
       <div class="card"><h3>Bancada</h3>${project}${queue}<div class="recipes">${recipes}</div></div>
       ${this.accountCard()}`;
+  }
+
+  /** O objetivo de longo prazo: rádio → transmissão → suprimentos → partir. */
+  private goalCard(s: ShelterState): string {
+    const stage = goalStage(s);
+    const order = ['radio', 'signal', 'supplies', 'ended'];
+    const step = (id: string, text: string) => {
+      const done = order.indexOf(stage) > order.indexOf(id);
+      const active = stage === id;
+      return `<div class="small ${done ? 'good' : active ? '' : 'muted'}">${done ? '✔' : active ? '▸' : '·'} ${text}</div>`;
+    };
+    let detail = '';
+    if (stage === 'radio') {
+      detail = `<div class="small muted">Construa o 📻 rádio na bancada (${describeCost(RECIPES.radio.cost)}).</div>`;
+    } else if (stage === 'signal') {
+      detail = `<div class="bar"><div style="width:${(s.signal / SIGNAL_HOURS) * 100}%"></div></div>
+        <div class="small muted">${s.signal}/${SIGNAL_HOURS}h de escuta. Anda sozinho, toda noite, enquanto houver alguém em casa.</div>`;
+    } else if (stage === 'supplies') {
+      const need = evacuationNeeds(s);
+      const alive = aliveSurvivors(s);
+      const allHome = !s.activeRaid && alive.every((v) => v.status === 'home');
+      const item = (ok: boolean, text: string) => `<span class="res ${ok ? 'good' : 'bad'}">${text}</span>`;
+      const ready = allHome && s.resources.fuel >= need.fuel && s.resources.food >= need.food && s.resources.water >= need.water;
+      detail = `<div class="resgrid" style="margin:6px 0">
+          ${item(s.resources.fuel >= need.fuel, `⛽ ${fmt(s.resources.fuel)}/${need.fuel}`)}
+          ${item(s.resources.food >= need.food, `🥫 ${fmt(s.resources.food)}/${need.food}`)}
+          ${item(s.resources.water >= need.water, `💧 ${fmt(s.resources.water)}/${need.water}`)}
+          ${item(allHome, allHome ? '🏠 todos em casa' : '🏠 falta gente')}
+        </div>
+        <div class="small muted">Combustível aparece na Oficina do Seu Zé. Partir encerra a história: vai quem estiver vivo.</div>
+        <div class="actions" style="margin-top:6px"><button class="primary" data-cmd='${JSON.stringify({ cmd: 'evacuate' })}' ${ready ? '' : 'disabled'}>🚗 Partir para o cais</button></div>`;
+    }
+    return `<div class="card"><h3>Objetivo · sair da cidade</h3>
+      ${step('radio', 'Construir um rádio')}
+      ${step('signal', 'Decifrar a transmissão')}
+      ${step('supplies', 'Juntar combustível e mantimentos e partir')}
+      ${detail}</div>`;
   }
 
   private accountCard(): string {
@@ -376,10 +416,13 @@ export class ShelterUi {
     const booked = v.expeditionId !== null;
     const eff = workEfficiency(v);
     const talked = v.talkedDay === dayOf(s.hour);
+    const bonds =
+      friendsOf(s, v).map((o) => `<span class="chip" title="Amigos: rendem mais na mesma tarefa, se protegem em expedição e seguram o humor um do outro.">💛 ${o.name}</span>`).join('') +
+      rivalsOf(s, v).map((o) => `<span class="chip neg" title="Desafetos: rendem menos na mesma tarefa e se atrapalham em expedição.">⚡ ${o.name}</span>`).join('');
     return `<div class="survivor-card">
       <div class="row"><strong>${v.name}</strong>
         <span class="small ${EMOTION_CLASS[emo]}">${away ? `<span class="warn">${v.status === 'raid' ? 'em incursão' : 'em expedição'}</span>` : `${EMOTION_LABEL[emo]}${v.sick ? ' · <span class="bad">doente</span>' : ''}${booked ? ' · <span class="warn">sai à noite</span>' : ''}`}</span></div>
-      <div class="chips">${v.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}" title="${TRAITS[t].description}">${TRAITS[t].name}</span>`).join('')}</div>
+      <div class="chips">${v.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}" title="${TRAITS[t].description}">${TRAITS[t].name}</span>`).join('')}${bonds}</div>
       <div class="stats">
         ${stat('Saúde', v.health, false)}${stat('Humor', v.mood, false)}
         ${stat('Fome', v.hunger, true)}${stat('Sede', v.thirst, true)}${stat('Cansaço', v.fatigue, true)}

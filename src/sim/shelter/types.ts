@@ -125,6 +125,12 @@ export interface ShelterState {
   standing: StandingOrder | null;
   /** Próximas construções: começam sozinhas quando houver material. */
   buildQueue: RecipeId[];
+  /** Laço entre cada par de sobreviventes ("a|b", ids em ordem): -100 (desafetos) a 100 (amigos). */
+  bonds: Record<string, number>;
+  /** Horas de rádio já ouvidas, até decifrar a transmissão. */
+  signal: number;
+  /** O grupo saiu da cidade: fim da história, com quem chegou ao barco. */
+  ended: { hour: number; saved: string[] } | null;
 }
 
 export interface RaidTicket {

@@ -12,7 +12,9 @@ import {
   applyRaidResult,
   cancelProject,
   createShelter,
+  evacuate,
   hasUndiscovered,
+  isFinished,
   isGameOver,
   markSeen,
   migrate,
@@ -43,6 +45,7 @@ export type ShelterCommand =
   | { type: 'standing'; order: StandingOrder | null }
   | { type: 'queue'; recipe: RecipeId }
   | { type: 'unqueue'; index: number }
+  | { type: 'evacuate' }
   | { type: 'seen' };
 
 export interface RaidRequest {
@@ -81,11 +84,12 @@ export function resumeShelter(saved: ShelterState | null, nowMs: number, newSeed
   return saved ? migrate(saved) : createShelter(newSeed, nowMs);
 }
 
-export { isGameOver };
+export { isFinished, isGameOver };
 
 export function applyCommand(s: ShelterState, cmd: ShelterCommand, nowMs: number): Result<null> {
   advanceTo(s, nowMs);
   if (isGameOver(s)) return fail('A comunidade acabou.');
+  if (s.ended) return fail('O grupo já partiu.');
   // Qualquer comando prova que o jogador está presente (tira o abrigo do modo de espera).
   if (cmd.type !== 'seen') s.lastSeenHour = s.hour;
   let error: string | null = null;
@@ -102,6 +106,7 @@ export function applyCommand(s: ShelterState, cmd: ShelterCommand, nowMs: number
     case 'standing': error = setStanding(s, cmd.order); break;
     case 'queue': error = queueProject(s, cmd.recipe); break;
     case 'unqueue': unqueueProject(s, cmd.index); break;
+    case 'evacuate': error = evacuate(s); break;
     case 'seen': markSeen(s); break;
     default: error = 'Comando desconhecido.';
   }
@@ -110,6 +115,7 @@ export function applyCommand(s: ShelterState, cmd: ShelterCommand, nowMs: number
 
 export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs: number): Result<RaidTicket> {
   advanceTo(s, nowMs);
+  if (isFinished(s)) return fail('Não há mais ninguém no abrigo.');
   if (s.activeRaid) return fail('Já existe uma incursão em andamento.');
   if (!s.discovered.includes(req.locationId)) return fail('Ninguém sabe o caminho até esse lugar.');
   const loc = locationById(req.locationId);
@@ -211,7 +217,7 @@ export function abandonRaid(s: ShelterState): void {
 /** Ferramenta de teste: pula horas de jogo (o servidor só aceita com ALLOW_DEV_TOOLS). */
 export function devSkip(s: ShelterState, hours: number): void {
   const n = Math.max(0, Math.min(48, Math.floor(hours)));
-  for (let i = 0; i < n && !isGameOver(s); i++) tickHour(s);
+  for (let i = 0; i < n && !isFinished(s); i++) tickHour(s);
 }
 
 /** Nova semente de incursão (o servidor usa crypto; o modo offline, Math.random). */

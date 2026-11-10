@@ -4,19 +4,25 @@ import { SURVIVORS } from '../../data/survivors';
 import { chance, pick, randInt } from '../rng';
 import {
   REAL_MS_PER_GAME_HOUR,
+  FRIEND,
+  RIVAL,
   addResources,
   aliveSurvivors,
+  bondOf,
   canAfford,
   changeMood,
   clamp,
   dayOf,
   die,
   emotionOf,
+  friendsOf,
   homeSurvivors,
   hourOfDay,
   isNight,
   log,
+  rivalsOf,
 } from './core';
+import { tickBonds } from './bonds';
 import { processExpeditions, sendExpedition, summarize } from './expeditions';
 import { expireDilemmas, maybeSpawnVisitor } from './visitors';
 import type { ShelterState, ShelterSurvivor, StandingOrder } from './types';
@@ -46,7 +52,7 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
       water: 8, dirtyWater: 0, food: 8, meds: 1, bandages: 2, scrap: 4, wood: 6,
       parts: 1, components: 0, fuel: 0, ammo: 0, weapons: 1, waste: 2,
     },
-    buildings: { workbench: 0, rainCollector: 0, filter: 0, stove: 0, garden: 0, bed: 1, latrine: 0, barricade: 0 },
+    buildings: { workbench: 0, rainCollector: 0, filter: 0, stove: 0, garden: 0, bed: 1, latrine: 0, barricade: 0, radio: 0 },
     project: null,
     survivors: SURVIVORS.map((d) => ({
       id: d.id,
@@ -84,6 +90,10 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
     mapsFound: [],
     standing: null,
     buildQueue: [],
+    // Marta e Iuri já se conheciam antes de tudo desabar.
+    bonds: { 'iuri|marta': 20 },
+    signal: 0,
+    ended: null,
   };
   log(s, 'Dia 1. Uma casa de dois andares com muro alto. Três pessoas, pouca água, nenhum plano.');
   log(s, 'Comece pela bancada: sem ela, quase nada se constrói.');
@@ -99,6 +109,10 @@ export function migrate(s: ShelterState): ShelterState {
   s.mapsFound ??= [];
   s.standing ??= null;
   s.buildQueue ??= [];
+  s.bonds ??= {};
+  s.signal ??= 0;
+  s.ended ??= null;
+  s.buildings.radio ??= 0;
   for (const v of s.survivors) v.raidDay ??= 0;
   for (const e of s.expeditions) {
     e.emergency ??= null;
@@ -131,6 +145,11 @@ export function isGameOver(s: ShelterState): boolean {
   return aliveSurvivors(s).length === 0;
 }
 
+/** A história acabou: todos se foram, ou o grupo saiu da cidade. */
+export function isFinished(s: ShelterState): boolean {
+  return isGameOver(s) || !!s.ended;
+}
+
 /** Avança a simulação até o momento real `nowMs`. Devolve quantas horas de jogo passaram. */
 export function advanceTo(s: ShelterState, nowMs: number, msPerHour = REAL_MS_PER_GAME_HOUR): number {
   const elapsed = nowMs - s.lastRealMs;
@@ -142,7 +161,7 @@ export function advanceTo(s: ShelterState, nowMs: number, msPerHour = REAL_MS_PE
   } else {
     s.lastRealMs += n * msPerHour;
   }
-  for (let i = 0; i < n && !isGameOver(s); i++) tickHour(s);
+  for (let i = 0; i < n && !isFinished(s); i++) tickHour(s);
   return n;
 }
 
@@ -174,6 +193,8 @@ export function tickHour(s: ShelterState): void {
   for (const v of homeSurvivors(s)) {
     if (v.health <= 0) die(s, v, `${v.name} morreu. ${v.hunger >= 80 ? 'De fome.' : v.thirst >= 80 ? 'De sede.' : v.sick ? 'A doença venceu.' : ''}`);
   }
+  tickBonds(s, h);
+  listenRadio(s, night);
   if (night) nightAttack(s, h);
   expireDilemmas(s);
   maybeSpawnVisitor(s, h);
@@ -244,6 +265,9 @@ function updateNeeds(s: ShelterState, v: ShelterSurvivor, night: boolean, hasBed
   if (v.thirst > 70) target -= 10;
   if (v.sick) target -= 8;
   if (v.fatigue > 80) target -= 6;
+  // Um amigo em casa segura o humor; um desafeto azeda.
+  target += Math.min(6, 3 * friendsOf(s, v).filter((o) => o.status === 'home').length);
+  target -= 3 * rivalsOf(s, v).filter((o) => o.status === 'home').length;
   v.mood = clamp(v.mood + (target - v.mood) * 0.03);
   v.brokenHours = emotionOf(v.mood) === 'quebrado' ? v.brokenHours + 1 : 0;
 }
@@ -254,8 +278,17 @@ export function workEfficiency(v: ShelterSurvivor): number {
   return (emo === 'deprimido' ? 0.5 : 1) * (v.fatigue > 70 ? 0.5 : 1);
 }
 
+/** Amigos na mesma tarefa rendem mais; desafetos se atrapalham. */
+function teamwork(s: ShelterState, v: ShelterSurvivor): number {
+  const mates = homeSurvivors(s).filter((o) => o !== v && o.task === v.task);
+  let m = 1;
+  if (mates.some((o) => bondOf(s, v.id, o.id) >= FRIEND)) m += 0.15;
+  if (mates.some((o) => bondOf(s, v.id, o.id) <= RIVAL)) m -= 0.15;
+  return m;
+}
+
 function work(s: ShelterState, v: ShelterSurvivor): void {
-  const eff = workEfficiency(v);
+  const eff = workEfficiency(v) * teamwork(s, v);
   if (eff === 0) return;
   switch (v.task) {
     case 'craft': {
@@ -348,13 +381,65 @@ function morningCare(s: ShelterState): void {
 
 function desertions(s: ShelterState): void {
   for (const v of homeSurvivors(s)) {
-    if (v.brokenHours < 24 || !chance(s, 0.3)) continue;
+    // Quem tem um amigo em casa pensa duas vezes antes de ir embora.
+    const stays = friendsOf(s, v).some((o) => o.status === 'home');
+    if (v.brokenHours < 24 || !chance(s, stays ? 0.12 : 0.3)) continue;
     v.status = 'gone';
     v.expeditionId = null;
     addResources(s, { food: 1, water: 1 }, -1);
     log(s, `${v.name} foi embora antes do amanhecer, levando um pouco de comida. Deixou um bilhete: "desculpa".`, 'bad');
     changeMood(s, -8, v);
+    for (const f of friendsOf(s, v)) f.mood = clamp(f.mood - 6);
   }
+}
+
+// ---------- Objetivo: sair da cidade ----------
+
+/** Horas de rádio (só à noite) até decifrar a transmissão: quatro noites. */
+export const SIGNAL_HOURS = 36;
+/** O que a viagem até o barco custa. */
+export const EVAC = { fuel: 6, foodEach: 2, waterEach: 2 } as const;
+
+export type GoalStage = 'radio' | 'signal' | 'supplies' | 'ended';
+
+export function goalStage(s: ShelterState): GoalStage {
+  if (s.ended) return 'ended';
+  if (!s.buildings.radio) return 'radio';
+  return s.signal < SIGNAL_HOURS ? 'signal' : 'supplies';
+}
+
+export function evacuationNeeds(s: ShelterState): { fuel: number; food: number; water: number } {
+  const n = aliveSurvivors(s).length;
+  return { fuel: EVAC.fuel, food: EVAC.foodEach * n, water: EVAC.waterEach * n };
+}
+
+function listenRadio(s: ShelterState, night: boolean): void {
+  if (!s.buildings.radio || s.signal >= SIGNAL_HOURS || !night || !homeSurvivors(s).length) return;
+  s.signal++;
+  if (s.signal === 1) log(s, '📻 O rádio só chia. Mas alguém deixa ligado a noite toda, por via das dúvidas.');
+  else if (s.signal === 12) log(s, '📻 No meio do chiado, uma voz. Repete números. Ainda não dá para entender.', 'good');
+  else if (s.signal === 24) log(s, '📻 A voz fala de um barco. "Cais velho… toda semana… enquanto houver alguém."', 'good');
+  else if (s.signal === SIGNAL_HOURS) {
+    log(s, `📻 Transmissão decifrada: um barco sai do cais velho. O caminho pede ${EVAC.fuel} de combustível para o carro e comida e água para a estrada.`, 'good');
+    changeMood(s, 8);
+  }
+}
+
+/** O grupo inteiro parte para o cais. Devolve o motivo, se ainda não puder. */
+export function evacuate(s: ShelterState): string | null {
+  if (goalStage(s) !== 'supplies') return 'Ainda não se sabe para onde ir.';
+  const alive = aliveSurvivors(s);
+  if (s.activeRaid || alive.some((v) => v.status !== 'home')) return 'Ninguém fica para trás: espere todos voltarem.';
+  const need = evacuationNeeds(s);
+  if (s.resources.fuel < need.fuel) return 'Falta combustível para o carro.';
+  if (s.resources.food < need.food || s.resources.water < need.water) return 'Falta comida ou água para a estrada.';
+  addResources(s, need, -1);
+  s.expeditions = [];
+  s.dilemmas = [];
+  s.standing = null;
+  s.ended = { hour: s.hour, saved: alive.map((v) => v.name) };
+  log(s, `${alive.map((v) => v.name).join(', ')} ${alive.length > 1 ? 'trancaram' : 'trancou'} a porta pela última vez e ${alive.length > 1 ? 'seguiram' : 'seguiu'} para o cais. O barco esperava.`, 'good');
+  return null;
 }
 
 function nightAttack(s: ShelterState, h: number): void {

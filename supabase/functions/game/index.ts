@@ -5,7 +5,7 @@ import {
   applyCommand,
   devSkip,
   finishRaid,
-  isGameOver,
+  isFinished,
   newShelter,
   openShelter,
   randomSeed,
@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
         state = openShelter(saved, now, randomSeed());
         break;
       case 'reset':
-        if (saved && !isGameOver(resumeShelter(saved, now, 0))) return json({ error: 'A comunidade ainda está viva.' }, 400);
+        if (saved && !isFinished(resumeShelter(saved, now, 0))) return json({ error: 'A comunidade ainda está viva.' }, 400);
         state = newShelter(now);
         break;
       case 'command': {

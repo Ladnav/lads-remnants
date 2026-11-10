@@ -49,7 +49,7 @@ export const ITEM_TO_RESOURCES: Record<ItemId, Cost> = {
   map_note: {},
 };
 
-export type BuildingId = 'workbench' | 'rainCollector' | 'filter' | 'stove' | 'garden' | 'bed' | 'latrine' | 'barricade';
+export type BuildingId = 'workbench' | 'rainCollector' | 'filter' | 'stove' | 'garden' | 'bed' | 'latrine' | 'barricade' | 'radio';
 export type RecipeId = BuildingId | 'weapon';
 
 export interface RecipeDef {
@@ -72,6 +72,7 @@ export const RECIPES: Record<RecipeId, RecipeDef> = {
   garden: { name: 'Horta', icon: '🌱', description: 'Produz comida com trabalho. Bebe 1 água por dia.', cost: { wood: 3, scrap: 1 }, hours: 4, needsWorkbench: true, max: 2 },
   latrine: { name: 'Latrina', icon: '🚽', description: 'Metade dos resíduos gerados.', cost: { wood: 2, scrap: 1 }, hours: 2, needsWorkbench: true, max: 1 },
   barricade: { name: 'Barricada', icon: '🧱', description: 'Menos ataques noturnos e defesa melhor.', cost: { wood: 4, scrap: 2 }, hours: 3, needsWorkbench: true, max: 3 },
+  radio: { name: 'Rádio', icon: '📻', description: 'Capta transmissões à noite. O primeiro passo para sair da cidade.', cost: { parts: 4, scrap: 4 }, hours: 8, needsWorkbench: true, max: 1 },
   weapon: { name: 'Arma improvisada', icon: '🔪', description: 'Uma lança ou faca para quem fica de guarda.', cost: { scrap: 2, wood: 1 }, hours: 2, needsWorkbench: true, max: 99 },
 };
 

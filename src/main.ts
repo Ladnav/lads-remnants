@@ -13,7 +13,7 @@ import { applyCommand, type RaidRequest } from './server/game';
 import { MAP_H, MAP_W } from './sim/raid/mapgen';
 import type { Action } from './sim/raid/types';
 import { aliveSurvivors, dayOf } from './sim/shelter/core';
-import { advanceTo, isGameOver, markSeen } from './sim/shelter/shelter';
+import { advanceTo, isFinished, markSeen } from './sim/shelter/shelter';
 import type { ShelterState } from './sim/shelter/types';
 
 const hud = document.getElementById('hud')!;
@@ -46,6 +46,7 @@ const shelterUi = new ShelterUi(hud, {
     try {
       const r = await backend.command(cmd);
       adopt(r.state);
+      if (shelter.ended) showGameOver();
       return r.error ?? null;
     } catch (e) {
       return (e as Error).message;
@@ -126,7 +127,7 @@ async function boot(): Promise<void> {
   if (shelterScene.ready) render();
   else game.scene.start('shelter');
   if (shelter.hour > seenBefore) showReport(seenBefore, resBefore, aliveBefore);
-  else if (isGameOver(shelter)) showGameOver();
+  else if (isFinished(shelter)) showGameOver();
 }
 
 const SCENE_OF: Record<View, string> = { shelter: 'shelter', map: 'region' };
@@ -159,7 +160,7 @@ function render(): void {
 setInterval(() => {
   if (!shelter || mode === 'raid') return;
   if (!advanceTo(shelter, Date.now())) return;
-  if (isGameOver(shelter)) showGameOver();
+  if (isFinished(shelter)) showGameOver();
   render();
 }, 1000);
 
@@ -219,7 +220,7 @@ async function endRaid(raidId: number, actions: Action[], back: View): Promise<v
   shelterUi.attach(shelter);
   if (error) shelterUi.setError(error);
   game.scene.start(SCENE_OF[back]);
-  if (isGameOver(shelter)) showGameOver();
+  if (isFinished(shelter)) showGameOver();
 }
 
 window.addEventListener('keydown', (e) => {
@@ -260,7 +261,7 @@ function showReport(since: number, resBefore: ShelterState['seenResources'], ali
       <div class="actions" style="margin-top:12px"><button class="primary" id="report-ok">Voltar ao abrigo</button></div>`);
   document.getElementById('report-ok')!.addEventListener('click', () => {
     overlay.classList.add('hidden');
-    if (isGameOver(shelter)) showGameOver();
+    if (isFinished(shelter)) showGameOver();
     render();
     void backend
       .command({ type: 'seen' })
@@ -271,12 +272,19 @@ function showReport(since: number, resBefore: ShelterState['seenResources'], ali
 
 function showGameOver(): void {
   if (!overlay.classList.contains('hidden')) return;
-  const lost = shelter.survivors.map((v) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ');
+  const fate = (v: ShelterState['survivors'][number]) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`;
+  const end = shelter.ended;
+  const behind = shelter.survivors.filter((v) => v.status === 'dead' || v.status === 'gone').map(fate).join(', ');
+  const head = end
+    ? `<h2 class="good">Eles saíram da cidade</h2>
+      <p>No dia ${dayOf(end.hour)}, ${end.saved.join(', ')} ${end.saved.length > 1 ? 'chegaram' : 'chegou'} ao cais velho e o barco partiu.
+      ${behind ? `Ficaram pelo caminho: ${behind}.` : 'Ninguém ficou para trás.'}</p>`
+    : `<h2 class="bad">A comunidade acabou</h2>
+      <p>Resistiram até o dia ${dayOf(shelter.hour)}. ${shelter.survivors.map(fate).join(', ')}.</p>`;
   modal(`
-      <h2 class="bad">A comunidade acabou</h2>
-      <p>Resistiram até o dia ${dayOf(shelter.hour)}. ${lost}.</p>
+      ${head}
       <div class="log report">${diaryHtml(shelter.diary.slice(-15))}</div>
-      <div class="actions" style="margin-top:12px"><button class="primary" id="restart">Começar de novo</button></div>`);
+      <div class="actions" style="margin-top:12px"><button class="primary" id="restart">${end ? 'Começar outra história' : 'Começar de novo'}</button></div>`);
   document.getElementById('restart')!.addEventListener('click', async () => {
     adopt(await backend.reset());
     overlay.classList.add('hidden');

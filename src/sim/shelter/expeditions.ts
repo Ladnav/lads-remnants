@@ -1,7 +1,7 @@
 import { ITEMS, type ItemId } from '../../data/items';
 import { ITEM_TO_RESOURCES, RISK_RULES, locationById, type RiskRule } from '../../data/shelter';
 import { chance, pick, randInt } from '../rng';
-import { addResources, clamp, die, hourOfDay, log } from './core';
+import { FRIEND, RIVAL, addBond, addResources, bondOf, clamp, die, hourOfDay, log } from './core';
 import type { Expedition, ShelterState, ShelterSurvivor } from './types';
 
 /** Horas depois da partida em que uma expedição pode se meter em apuros. */
@@ -126,6 +126,7 @@ function resolveExpedition(s: ShelterState, exp: Expedition, skipId?: string): v
   const loc = locationById(exp.locationId);
   const rule = RISK_RULES[exp.risk];
   const stock = s.locationStock[loc.id] ?? 100;
+  const group = s.survivors.filter((x) => x.expeditionId === exp.id && x.id !== skipId && x.status === 'away');
   for (const v of s.survivors.filter((x) => x.expeditionId === exp.id && x.id !== skipId)) {
     v.expeditionId = null;
     if (v.status !== 'away') continue;
@@ -134,6 +135,13 @@ function resolveExpedition(s: ShelterState, exp: Expedition, skipId?: string): v
     if (v.traits.includes('silencioso')) traitMul *= 0.7;
     if (v.traits.includes('lutador')) traitMul *= 0.7;
     if (v.traits.includes('medroso')) traitMul *= 1.2;
+    // Amigos se cobrem lá fora; desafetos se atrapalham.
+    const mate = group.find((o) => o !== v);
+    if (mate) {
+      const bond = bondOf(s, v.id, mate.id);
+      if (bond >= FRIEND) traitMul *= 0.8;
+      else if (bond <= RIVAL) traitMul *= 1.2;
+    }
     const weak = v.health < 40 ? 2 : 1;
     const trapped = exp.emergency?.survivorId === v.id && exp.emergency.state !== 'played' ? EMERGENCY_DANGER[exp.emergency.state] : 1;
     const deathChance = loc.danger * 0.025 * Math.pow(rule.danger, 1.5) * traitMul * weak * trapped * trapped;
@@ -167,6 +175,8 @@ function resolveExpedition(s: ShelterState, exp: Expedition, skipId?: string): v
       log(s, `${v.name} voltou de ${loc.name} de mãos vazias.`, 'warn');
     }
   }
+  // Quem atravessa uma noite dessas junto volta mais próximo.
+  if (group.length === 2 && group.every((x) => x.status === 'home')) addBond(s, group[0].id, group[1].id, 6);
 }
 
 export function summarize(items: readonly ItemId[]): string {

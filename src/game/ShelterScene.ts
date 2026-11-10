@@ -37,6 +37,7 @@ const STATIONS = {
   stove: [14, 3] as P,
   filter: [25, 6] as P,
   latrine: [3, 17] as P,
+  radio: [16, 10] as P,
   collectors: [[21, 10], [25, 10]] as P[],
   gardens: [[20, 15], [24, 15]] as P[],
 };
@@ -202,6 +203,7 @@ export class ShelterScene extends Phaser.Scene {
     station(STATIONS.stove, RECIPES.stove.icon, s.buildings.stove > 0, 0x6a6a6a, 14);
     station(STATIONS.filter, RECIPES.filter.icon, s.buildings.filter > 0, 0x4f7394, 18);
     station(STATIONS.latrine, RECIPES.latrine.icon, s.buildings.latrine > 0, 0x9a978a, 10);
+    station(STATIONS.radio, RECIPES.radio.icon, s.buildings.radio > 0, 0x5a5a66, 11);
     STATIONS.collectors.forEach((p, i) => station(p, RECIPES.rainCollector.icon, i < s.buildings.rainCollector, 0x3d6f8f, 16));
 
     STATIONS.gardens.forEach((p, i) => {
@@ -393,6 +395,7 @@ function furniture(s: ShelterState): Set<number> {
   if (s.buildings.stove) add(...STATIONS.stove);
   if (s.buildings.filter) add(...STATIONS.filter);
   if (s.buildings.latrine) add(...STATIONS.latrine);
+  if (s.buildings.radio) add(...STATIONS.radio);
   STATIONS.collectors.slice(0, s.buildings.rainCollector).forEach(([x, y]) => add(x, y));
   STATIONS.gardens.slice(0, s.buildings.garden).forEach(([x, y]) => {
     for (let j = 0; j < 2; j++) for (let i = 0; i < 3; i++) add(x + i, y + j);
