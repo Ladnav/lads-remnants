@@ -240,11 +240,24 @@ export class ShelterScene extends Phaser.Scene {
         x = end;
       }
     }
+    if (!this.textures.exists('shelter-vignette')) {
+      const w = W * TILE;
+      const h = H * TILE + WALL_H;
+      const tex = this.textures.createCanvas('shelter-vignette', w, h)!;
+      const ctx = tex.getContext();
+      const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.4, w / 2, h / 2, w * 0.72);
+      grad.addColorStop(0, 'rgba(5, 5, 6, 0)');
+      grad.addColorStop(1, 'rgba(5, 5, 6, 0.55)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      tex.refresh();
+    }
+    this.add.image(0, -WALL_H, 'shelter-vignette').setOrigin(0).setDepth(80000);
   }
 
   /** Móvel pintado: base no chão em (cx, baseY), com a largura dada em tiles. */
   private prop(key: string, cx: number, baseY: number, widthTiles: number, row: number): Phaser.GameObjects.Image {
-    const img = this.add.image(cx, baseY, key).setOrigin(0.5, 1).setDepth(rowDepth(row, 6)).setTint(0xe6dfd2);
+    const img = this.add.image(cx, baseY, key).setOrigin(0.5, 1).setDepth(rowDepth(row, 6)).setTint(0xcbc4b8);
     img.setScale((widthTiles * TILE) / img.width);
     this.decor.push(img);
     this.floor.fillStyle(0x000000, 0.4).fillEllipse(cx + 2, baseY - 2, widthTiles * TILE, Math.max(8, widthTiles * TILE * 0.32));
@@ -260,7 +273,7 @@ export class ShelterScene extends Phaser.Scene {
     const [dx, dy] = FRONT_DOOR;
     if (s.buildings.barricade > 0) this.prop('prop-barricade', dx * TILE + TILE / 2, dy * TILE - 3, 2 + s.buildings.barricade * 0.45, dy - 1);
     BED_SLOTS.forEach(([x, y], i) => {
-      if (i < s.buildings.bed) this.prop('prop-bed', x * TILE + TILE / 2, (y + 1) * TILE + 1, 1.15, y);
+      if (i < s.buildings.bed) this.prop('prop-bed', x * TILE + TILE / 2, (y + 1) * TILE + 3, 1.6, y);
     });
     const station = (p: P, key: string, built: boolean, widthTiles: number) => {
       if (built) this.prop(key, p[0] * TILE + TILE / 2, (p[1] + 1) * TILE - 2, widthTiles, p[1]);
@@ -568,7 +581,7 @@ const PROPS = ['prop-bed', 'prop-workbench', 'prop-stove', 'prop-filter', 'prop-
 /** A pintura é 4:3: cobre a cena (574 de altura) e mais uma sobra embaixo. */
 const BG_H = 588;
 /** Escurece um pouco a pintura, que veio clara demais para o tom do jogo. */
-const BG_TINT = 0xb9b2a6;
+const BG_TINT = 0x9f998f;
 
 type Station = 'workbench' | 'stove' | 'filter' | 'latrine' | 'radio' | 'collector';
 
