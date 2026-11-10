@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { RECIPES } from '../data/shelter';
 import { emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 import { TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, wall } from './oblique';
+import { NightLight, type LightSource } from './night';
 import { Actor, survivorLook, type Pose } from './sprites';
 
 const W = 28;
@@ -92,7 +92,7 @@ export class ShelterScene extends Phaser.Scene {
 
   private floor!: Phaser.GameObjects.Graphics;
   private rows: Phaser.GameObjects.Graphics[] = [];
-  private night!: Phaser.GameObjects.Rectangle;
+  private night!: NightLight;
   private sprites = new Map<string, Sprite>();
   private decor: Phaser.GameObjects.GameObject[] = [];
   /** Tiles ocupados por móveis: ninguém atravessa, só chega neles. */
@@ -118,7 +118,7 @@ export class ShelterScene extends Phaser.Scene {
     for (const r of ROOMS) {
       this.add.text(r.at[0] * TILE + 4, r.at[1] * TILE + 3, r.name, { fontFamily: 'monospace', fontSize: '10px', color: '#c9bba3' }).setAlpha(0.55).setDepth(1);
     }
-    this.night = this.add.rectangle(0, -WALL_H, W * TILE, H * TILE + WALL_H, 0x0b1630, 0).setOrigin(0).setDepth(100000);
+    this.night = new NightLight(this, W * TILE, H * TILE + WALL_H);
     this.time.addEvent({ delay: 1400, loop: true, callback: () => this.fidget() });
     this.onReady();
   }
@@ -132,11 +132,7 @@ export class ShelterScene extends Phaser.Scene {
     this.drawHouse(s);
     this.drawPeople(s);
     const h = hourOfDay(s.hour);
-    this.night.setFillStyle(0x0b1630, isNight(h) ? 0.5 : h === 20 || h === 6 ? 0.25 : 0);
-  }
-
-  private icon(x: number, y: number, text: string, row: number, alpha = 1): void {
-    this.decor.push(this.add.text(x, y, text, { fontSize: '15px' }).setOrigin(0.5).setAlpha(alpha).setDepth(rowDepth(row, 6)));
+    this.night.set(isNight(h) ? 0.68 : h === 20 || h === 6 ? 0.38 : 0, this.lightSources(s));
   }
 
   private drawHouse(s: ShelterState): void {
@@ -188,23 +184,25 @@ export class ShelterScene extends Phaser.Scene {
       g.fillStyle(0xe8e0d0).fillRect(x * TILE + 6, y * TILE - 11, TILE - 12, 6);
     });
 
-    const station = (p: P, emoji: string, built: boolean, color: number, h = 12) => {
+    const station = (p: P, kind: Station, built: boolean, color: number, h = 12) => {
       const px = p[0] * TILE;
       const py = p[1] * TILE;
       if (built) {
-        box(this.rows[p[1]], px + 3, py + 6, TILE - 6, TILE - 10, h, color);
-        this.icon(px + TILE / 2, py + 6 - h + (TILE - 10) / 2, emoji, p[1]);
+        const g = this.rows[p[1]];
+        box(g, px + 3, py + 6, TILE - 6, TILE - 10, h, color);
+        detail(g, kind, px + 3, py + 6 - h, TILE - 10, h);
       } else {
-        f.lineStyle(1, 0xa89a80, 0.35).strokeRect(px + 3, py + 3, TILE - 6, TILE - 6);
-        this.icon(px + TILE / 2, py + TILE / 2, emoji, 0, 0.25);
+        // Lugar reservado: só um risco de giz no chão.
+        f.lineStyle(1, 0xa89a80, 0.3).strokeRect(px + 3.5, py + 3.5, TILE - 7, TILE - 7);
+        f.lineStyle(1, 0xa89a80, 0.15).lineBetween(px + 6, py + 6, px + TILE - 6, py + TILE - 6);
       }
     };
-    station(STATIONS.workbench, RECIPES.workbench.icon, s.buildings.workbench > 0, 0x8a6a3e);
-    station(STATIONS.stove, RECIPES.stove.icon, s.buildings.stove > 0, 0x6a6a6a, 14);
-    station(STATIONS.filter, RECIPES.filter.icon, s.buildings.filter > 0, 0x4f7394, 18);
-    station(STATIONS.latrine, RECIPES.latrine.icon, s.buildings.latrine > 0, 0x9a978a, 10);
-    station(STATIONS.radio, RECIPES.radio.icon, s.buildings.radio > 0, 0x5a5a66, 11);
-    STATIONS.collectors.forEach((p, i) => station(p, RECIPES.rainCollector.icon, i < s.buildings.rainCollector, 0x3d6f8f, 16));
+    station(STATIONS.workbench, 'workbench', s.buildings.workbench > 0, 0x8a6a3e);
+    station(STATIONS.stove, 'stove', s.buildings.stove > 0, 0x6a6a6a, 14);
+    station(STATIONS.filter, 'filter', s.buildings.filter > 0, 0x4f7394, 18);
+    station(STATIONS.latrine, 'latrine', s.buildings.latrine > 0, 0x9a978a, 10);
+    station(STATIONS.radio, 'radio', s.buildings.radio > 0, 0x6a5238, 11);
+    STATIONS.collectors.forEach((p, i) => station(p, 'collector', i < s.buildings.rainCollector, 0x3d6f8f, 16));
 
     STATIONS.gardens.forEach((p, i) => {
       const px = p[0] * TILE;
@@ -219,8 +217,8 @@ export class ShelterScene extends Phaser.Scene {
           g.fillStyle(s.gardenWatered ? 0x7cc04f : 0x9aa055).fillCircle(cx, cy - 8, 4);
         }
       } else {
-        f.lineStyle(1, 0xa89a80, 0.35).strokeRect(px + 3, py + 3, TILE * 3 - 6, TILE * 2 - 6);
-        this.icon(px + TILE * 1.5, py + TILE, RECIPES.garden.icon, 0, 0.25);
+        f.lineStyle(1, 0xa89a80, 0.3).strokeRect(px + 3.5, py + 3.5, TILE * 3 - 7, TILE * 2 - 7);
+        f.lineStyle(1, 0xa89a80, 0.15).lineBetween(px + 6, py + 6, px + TILE * 3 - 6, py + TILE * 2 - 6);
       }
     });
 
@@ -245,6 +243,16 @@ export class ShelterScene extends Phaser.Scene {
         f.fillStyle(0x3d3a26, 0.85).fillEllipse((2 + ((k * 7) % 4)) * TILE + 10, (15 + (k % 3)) * TILE + 14, 12 + (k % 3) * 3, 7);
       }
     }
+  }
+
+  /** Onde há luz à noite: fogão aceso, rádio, bancada, e um lampião na sala e outro no dormitório. */
+  private lightSources(s: ShelterState): LightSource[] {
+    const at = (p: P, r: number): LightSource => ({ x: p[0] * TILE + TILE / 2, y: p[1] * TILE + TILE / 2, r });
+    const out = [at([8, 11], 150), at([5, 5], 95)];
+    if (s.buildings.stove) out.push(at(STATIONS.stove, 130));
+    if (s.buildings.radio) out.push(at(STATIONS.radio, 80));
+    if (s.buildings.workbench) out.push(at(STATIONS.workbench, 70));
+    return out;
   }
 
   private drawPeople(s: ShelterState): void {
@@ -387,6 +395,57 @@ export class ShelterScene extends Phaser.Scene {
 }
 
 /** Tiles com móveis construídos (camas, bancadas, hortas, caixotes). */
+type Station = 'workbench' | 'stove' | 'filter' | 'latrine' | 'radio' | 'collector';
+
+/**
+ * O que identifica cada móvel, desenhado sobre o bloco no mesmo traço do resto da casa.
+ * (x, y) é o canto do topo do bloco, `d` a profundidade do topo e `h` a altura da frente.
+ */
+function detail(g: Phaser.GameObjects.Graphics, kind: Station, x: number, y: number, d: number, h: number): void {
+  const cx = x + 11;
+  const cy = y + d / 2;
+  switch (kind) {
+    case 'workbench':
+      g.fillStyle(0x3b3b3b).fillRect(x + 2, y + 3, 6, 4); // morsa
+      g.fillStyle(0xbdbdbd).fillRect(x + 10, y + 3, 9, 2); // serrote
+      g.fillStyle(0x6b4423).fillRect(x + 10, y + 5, 3, 2);
+      g.fillStyle(0xb0392b).fillRect(x + 12, y + 10, 7, 5); // caixa de ferramentas
+      g.fillStyle(0x7d2a20).fillRect(x + 12, y + 14, 7, 1);
+      break;
+    case 'stove':
+      g.fillStyle(0x1f1f1f).fillCircle(cx, cy, 6); // boca
+      g.fillStyle(0xe0762a).fillCircle(cx, cy, 3);
+      g.fillStyle(0xf2c14e).fillRect(cx - 1, cy - 1, 2, 2);
+      g.fillStyle(0x1f1f1f).fillRect(x + 6, y + d + 3, 10, h - 6); // porta do fogo
+      g.fillStyle(0xe0762a).fillRect(x + 8, y + d + 5, 6, h - 10);
+      g.fillStyle(0x4a4a4a).fillRect(x + 17, y - 8, 3, 10); // chaminé
+      break;
+    case 'filter':
+      g.fillStyle(0xb9b3a3).fillCircle(cx, cy, 7); // pano e areia
+      g.fillStyle(0x2b2b2b).fillCircle(cx, cy, 4); // carvão
+      g.fillStyle(0x9a9a9a).fillRect(x + 15, y + d + h - 7, 4, 2); // torneira
+      g.fillStyle(0x7fb2d6).fillRect(x + 16, y + d + h - 5, 2, 4);
+      break;
+    case 'latrine':
+      g.fillStyle(0x2a2620).fillEllipse(cx, cy, 11, 7);
+      g.fillStyle(0xe8e0d0).fillRect(x + 17, y + 2, 3, 4); // papel
+      break;
+    case 'radio':
+      g.fillStyle(0x2b2b30).fillRect(x + 3, y + 3, 16, 10);
+      g.fillStyle(0x45454d).fillRect(x + 3, y + 3, 16, 2);
+      g.fillStyle(0x6fd06a).fillRect(x + 5, y + 7, 2, 2); // luz
+      g.fillStyle(0xd9b45b).fillRect(x + 9, y + 7, 8, 2); // mostrador
+      g.fillStyle(0x8a8a8a).fillCircle(x + 7, y + 11, 1.5);
+      g.lineStyle(1, 0xcfcfcf, 0.9).lineBetween(x + 18, y + 3, x + 21, y - 10); // antena
+      break;
+    case 'collector':
+      g.fillStyle(0x8c8f7a).fillRect(x + 1, y + 1, 20, d - 2); // lona
+      g.fillStyle(0x70735f).fillTriangle(x + 1, y + 1, x + 21, y + 1, cx, cy);
+      g.fillStyle(0x2f5f80).fillCircle(cx, cy, 3); // água
+      break;
+  }
+}
+
 function furniture(s: ShelterState): Set<number> {
   const out = new Set<number>();
   const add = (x: number, y: number) => out.add(y * W + x);

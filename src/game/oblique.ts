@@ -8,6 +8,8 @@ import Phaser from 'phaser';
  */
 export const TILE = 28;
 export const WALL_H = 14;
+/** O canvas tem RES vezes a resolução lógica: a pintura precisa de pixels para não borrar. */
+export const RES = 2;
 
 /** Profundidade de uma linha do grid; objetos da mesma linha usam frações dela. */
 export const rowDepth = (row: number, layer = 0): number => 10 + row * 10 + layer;
@@ -20,7 +22,17 @@ export function shade(color: number, f: number): number {
 
 /** Câmera deslocada para caber o topo das paredes da primeira linha. */
 export function setupObliqueCamera(scene: Phaser.Scene): void {
-  scene.cameras.main.setScroll(0, -WALL_H);
+  scene.cameras.main.setOrigin(0, 0).setZoom(RES).setScroll(0, -WALL_H);
+  sharpText(scene);
+}
+
+/** Todo texto criado na cena nasce na resolução do canvas, senão fica borrado com o zoom. */
+export function sharpText(scene: Phaser.Scene): void {
+  const add = scene.add as Phaser.GameObjects.GameObjectFactory & { sharp?: boolean };
+  if (add.sharp) return;
+  add.sharp = true;
+  const make = add.text.bind(add);
+  add.text = (...args: Parameters<typeof make>) => make(...args).setResolution(RES * 2);
 }
 
 /**

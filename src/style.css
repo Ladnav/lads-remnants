@@ -732,3 +732,277 @@ input[type='email'] {
     z-index: 15;
   }
 }
+
+/* ---------- Identidade: pintura sombria, luz de lampião ---------- */
+:root {
+  --bg: #0a0b0b;
+  --panel: rgba(20, 21, 20, 0.94);
+  --panel-2: #23231f;
+  --line: #33312a;
+  --text: #dcd6c8;
+  --muted: #8f897c;
+  --good: #93b56a;
+  --warn: #dba24a;
+  --bad: #d4553c;
+  --accent: #e0a04a;
+  --title: 'Special Elite', 'Courier New', monospace;
+  font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+}
+
+/* A casa da abertura fica ao fundo, quase apagada. */
+body {
+  background:
+    linear-gradient(rgba(10, 11, 11, 0.9), rgba(10, 11, 11, 0.97)),
+    url('/art/title.webp') center / cover fixed #0a0b0b;
+}
+
+.card h3,
+.name,
+.tb-clock,
+.who-name,
+.tab-label,
+.modal h1,
+.modal h2 {
+  font-family: var(--title);
+  font-weight: 400;
+}
+
+.card h3 {
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.card,
+#topbar,
+#ticker,
+.modal {
+  box-shadow:
+    0 1px 0 rgba(255, 240, 210, 0.04) inset,
+    0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.card {
+  overflow: hidden;
+}
+
+button {
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(255, 240, 210, 0.05) inset;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+button.primary {
+  background: linear-gradient(#e8ad58, #c9873a);
+  border-color: #8a5a22;
+  text-shadow: 0 1px 0 rgba(255, 230, 180, 0.35);
+}
+
+.tab.active {
+  background: var(--panel);
+}
+
+.modal h1 {
+  letter-spacing: 0.12em;
+  font-size: 30px;
+}
+
+.log,
+#ticker {
+  font-family: var(--title);
+  font-size: 12.5px;
+}
+
+/* Faixa ilustrada que sangra até a borda do cartão e some no escuro embaixo. */
+.banner {
+  height: 96px;
+  margin: -10px -12px 8px;
+  background-size: cover;
+  background-position: center 40%;
+  -webkit-mask-image: linear-gradient(#000 55%, transparent);
+  mask-image: linear-gradient(#000 55%, transparent);
+}
+
+.banner.tall {
+  height: 150px;
+}
+
+.banner.hero {
+  height: 200px;
+  margin: -20px -20px 4px;
+  border-radius: 8px 8px 0 0;
+}
+
+.face {
+  width: 46px;
+  height: 46px;
+  image-rendering: auto;
+  border-radius: 3px;
+  border-color: #4a4336;
+  flex-shrink: 0;
+}
+
+.face[src^='data:'] {
+  image-rendering: pixelated;
+}
+
+.tb-clock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tb-clock .face {
+  width: 30px;
+  height: 30px;
+}
+
+.who-name {
+  font-size: 16px;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .banner.hero {
+    height: 150px;
+    margin: -16px -16px 4px;
+  }
+}
+
+/* ---------- Ficha do personagem ---------- */
+.who-open {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-height: 0;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.who-open:hover {
+  color: var(--accent);
+}
+
+.who-open:hover .face {
+  border-color: var(--accent);
+}
+
+.modal.wide {
+  max-width: 860px;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.profile-face {
+  background: #050505;
+}
+
+.profile-face img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 340px;
+  object-fit: cover;
+  -webkit-mask-image: linear-gradient(90deg, #000 70%, transparent);
+  mask-image: linear-gradient(90deg, #000 70%, transparent);
+}
+
+.profile-face img[src^='data:'] {
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.profile-body {
+  padding: 20px 20px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-body h1 {
+  letter-spacing: 0.06em;
+}
+
+.profile-body h3 {
+  margin: 10px 0 2px;
+  font-family: var(--title);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.modal p.profile-bio {
+  margin: 4px 0;
+  font-family: var(--title);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pstats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.pstat {
+  display: grid;
+  grid-template-columns: 70px 1fr 30px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pstat .bar {
+  margin: 0;
+  height: 8px;
+}
+
+.pstat strong {
+  text-align: right;
+  color: var(--text);
+}
+
+.profile-nav {
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  justify-content: space-between;
+}
+
+.profile .log.report {
+  max-height: 120px;
+}
+
+@media (max-width: 900px) {
+  .profile {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-face img {
+    height: 240px;
+    min-height: 0;
+    object-position: center 20%;
+    -webkit-mask-image: linear-gradient(#000 65%, transparent);
+    mask-image: linear-gradient(#000 65%, transparent);
+  }
+
+  .profile-body {
+    padding: 0 16px 8px;
+  }
+
+  .profile-nav {
+    padding: 10px 16px;
+  }
+}

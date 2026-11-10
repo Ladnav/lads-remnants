@@ -1,9 +1,10 @@
 import { ITEMS } from '../data/items';
+import { banner, placeUrl } from './art';
 import { LOCATIONS, RECIPES, RESOURCES, RISK_RULES, TASKS, locationById, type RecipeId, type ResourceId, type RiskRule, type TaskId } from '../data/shelter';
 import { TRAITS } from '../data/survivors';
 import type { Account } from '../net/backend';
 import type { ShelterCommand } from '../server/game';
-import { aliveSurvivors, canAfford, dayOf, describeCost, emotionOf, friendsOf, hourOfDay, isNight, rivalsOf } from '../sim/shelter/core';
+import { FRIEND, RIVAL, aliveSurvivors, bondOf, canAfford, dayOf, describeCost, emotionOf, friendsOf, hourOfDay, isNight, rivalsOf } from '../sim/shelter/core';
 import { pendingEmergencies } from '../sim/shelter/expeditions';
 import { SIGNAL_HOURS, evacuationNeeds, goalStage, hasUndiscovered, workEfficiency } from '../sim/shelter/shelter';
 import type { DiaryEntry, Emotion, ShelterState, ShelterSurvivor } from '../sim/shelter/types';
@@ -24,6 +25,7 @@ type Cmd =
   | { cmd: 'tab'; tab: Tab }
   | { cmd: 'task'; id: string; task: TaskId }
   | { cmd: 'talk'; id: string }
+  | { cmd: 'profile'; id: string }
   | { cmd: 'planRaid'; id: string }
   | { cmd: 'raid' }
   | { cmd: 'takeOver'; expId: number }
@@ -51,8 +53,10 @@ export interface ShelterUiHooks {
   skip: (hours: number) => void;
   account: () => Account;
   linkEmail: (email: string) => Promise<string>;
-  /** Retrato (data URL) do sobrevivente, tirado do sprite. */
+  /** Retrato do sobrevivente: a pintura, ou o sprite para quem não tem. */
   portrait: (id: string) => string | null;
+  /** Abre a ficha do personagem. */
+  profile: (id: string) => void;
 }
 
 const EMOTION_LABEL: Record<Emotion, string> = { ok: 'bem', triste: 'triste', deprimido: 'deprimido(a)', quebrado: 'quebrado(a)' };
@@ -156,6 +160,7 @@ export class ShelterUi {
         return;
       }
       case 'takeOver': this.hooks.takeOver(c.expId); return;
+      case 'profile': this.hooks.profile(c.id); return;
       case 'skip': this.hooks.skip(c.hours); return;
       case 'link': {
         const input = this.hud.querySelector<HTMLInputElement>('input[name=email]');
@@ -289,6 +294,7 @@ export class ShelterUi {
       .map(
         (d) => `
         <div class="card door">
+          ${banner(d.kind === 'bandits' ? 'raiders' : 'door')}
           <h3>Na porta · vai embora em ${d.expiresHour - s.hour}h</h3>
           <div class="name" style="font-size:15px">${d.title}</div>
           <p class="small">${d.text}</p>
@@ -465,6 +471,7 @@ export class ShelterUi {
 
     return `${header}
       <div class="card">
+        ${placeUrl(loc.id) ? banner(loc.id, 'tall') : ''}
         <div class="row"><span class="name">${loc.icon} ${loc.name}</span><span class="${loc.danger === 3 ? 'bad' : 'warn'}">${'☠'.repeat(loc.danger)}</span></div>
         <p class="small muted" style="margin:4px 0">${loc.description}</p>
         <div class="small">Costuma ter: ${lootPreview}</div>
@@ -495,7 +502,7 @@ export class ShelterUi {
       rivalsOf(s, v).map((o) => `<span class="chip neg" title="Desafetos: rendem menos na mesma tarefa e se atrapalham em expedição.">⚡ ${o.name}</span>`).join('');
     const face = this.hooks.portrait(v.id);
     return `<div class="survivor-card">
-      <div class="row"><strong class="who-name">${face ? `<img class="face" src="${face}" alt=""/>` : ''}${v.name}</strong>
+      <div class="row"><button class="who-name who-open" title="Abrir a ficha" data-cmd='${JSON.stringify({ cmd: 'profile', id: v.id })}'>${face ? `<img class="face" src="${face}" alt=""/>` : ''}${v.name}</button>
         <span class="small ${EMOTION_CLASS[emo]}">${away ? `<span class="warn">${v.status === 'raid' ? 'em incursão' : 'em expedição'}</span>` : `${EMOTION_LABEL[emo]}${v.sick ? ' · <span class="bad">doente</span>' : ''}${booked ? ' · <span class="warn">sai à noite</span>' : ''}`}</span></div>
       <div class="chips">${v.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}" title="${TRAITS[t].description}">${TRAITS[t].name}</span>`).join('')}${bonds}</div>
       <div class="stats">
@@ -515,6 +522,42 @@ export class ShelterUi {
       }
     </div>`;
   }
+}
+
+const STATUS_LABEL: Record<ShelterSurvivor['status'], string> = { home: 'no abrigo', away: 'em expedição', raid: 'em incursão', dead: 'morto(a)', gone: 'foi embora' };
+
+/** Ficha do personagem: retrato grande, história, traços, estado e laços. */
+export function profileHtml(s: ShelterState, v: ShelterSurvivor, face: string | null): string {
+  const emo = emotionOf(v.mood);
+  const alive = v.status !== 'dead' && v.status !== 'gone';
+  const num = (label: string, value: number, inverted: boolean) => {
+    const danger = inverted ? value >= 70 : value <= 30;
+    return `<div class="pstat"><span>${label}</span><div class="bar ${danger ? 'full' : ''}"><div style="width:${value}%"></div></div><strong class="${danger ? 'bad' : ''}">${Math.round(value)}</strong></div>`;
+  };
+  const others = aliveSurvivors(s)
+    .filter((o) => o.id !== v.id)
+    .map((o) => ({ o, bond: bondOf(s, v.id, o.id) }))
+    .sort((a, b) => b.bond - a.bond);
+  const bondWord = (b: number) => (b >= FRIEND ? '💛 amigos' : b <= RIVAL ? '⚡ desafetos' : b >= 15 ? 'se dão bem' : b <= -15 ? 'se estranham' : 'conhecidos');
+  const bonds = others.length
+    ? others
+        .map(({ o, bond }) => `<div class="row small"><span>${o.name}</span><span class="${bond >= FRIEND ? 'good' : bond <= RIVAL ? 'bad' : 'muted'}">${bondWord(bond)}</span></div>`)
+        .join('')
+    : '<div class="small muted">Não sobrou ninguém.</div>';
+  const mentions = s.diary.filter((e) => e.text.includes(v.name)).slice(-6);
+  return `<div class="profile">
+      <div class="profile-face">${face ? `<img src="${face}" alt="Retrato de ${v.name}"/>` : ''}</div>
+      <div class="profile-body">
+        <h1>${v.name}</h1>
+        <div class="small ${alive ? EMOTION_CLASS[emo] : 'bad'}">${STATUS_LABEL[v.status]}${alive ? ` · ${EMOTION_LABEL[emo]}${v.sick ? ' · doente' : ''}` : ''}</div>
+        <p class="profile-bio">${v.bio}</p>
+        ${v.traits.map((t) => `<div class="small"><span class="chip ${TRAITS[t].negative ? 'neg' : ''}">${TRAITS[t].name}</span> <span class="muted">${TRAITS[t].description}</span></div>`).join('')}
+        ${alive ? `<div class="pstats">${num('Saúde', v.health, false)}${num('Humor', v.mood, false)}${num('Fome', v.hunger, true)}${num('Sede', v.thirst, true)}${num('Cansaço', v.fatigue, true)}</div>
+        <div class="small muted">Tarefa: <strong>${TASKS[v.task].name}</strong>. ${TASKS[v.task].description}</div>` : ''}
+        <h3>Laços</h3>${bonds}
+        <h3>No diário</h3><div class="log report">${mentions.length ? diaryHtml(mentions) : '<div class="muted">Nada ainda.</div>'}</div>
+      </div>
+    </div>`;
 }
 
 export function diaryHtml(entries: DiaryEntry[]): string {

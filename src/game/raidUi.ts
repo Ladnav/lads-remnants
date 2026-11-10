@@ -18,6 +18,7 @@ import {
 } from '../sim/raid/raid';
 import type { Action, RaidEvent, RaidState, Vec } from '../sim/raid/types';
 import type { RaidTicket } from '../sim/shelter/types';
+import { faceUrl } from './art';
 import type { RaidScene } from './RaidScene';
 
 /** Interface da incursão ativa: HUD lateral, teclado e tela de fim. */
@@ -27,6 +28,7 @@ export class RaidUi {
   private onDone: (actions: Action[]) => void = () => {};
   /** Modo de mira: o próximo clique no mapa arremessa uma pedra. */
   private throwing = false;
+  private face: string | null = null;
 
   constructor(
     private scene: RaidScene,
@@ -56,6 +58,7 @@ export class RaidUi {
     this.throwing = false;
     const def = ticket.def;
     this.scene.setPlayer(def.id);
+    this.face = faceUrl(def.id);
     const s = (this.state = createRaid(ticket.seed, def, ticket.opts));
     const roof = s.exits.find((e) => e.id === 'roof');
     this.log = s.emergency
@@ -222,7 +225,7 @@ export class RaidUi {
 
     // O essencial fica na barra de cima, colada no jogo; o painel guarda o que se toca.
     this.top.innerHTML = `<div class="tb-main">
-        <span class="tb-clock">${sv.name} <span class="bad">${hearts}</span></span>
+        <span class="tb-clock">${this.face ? `<img class="face" src="${this.face}" alt=""/>` : ''}${sv.name} <span class="bad">${hearts}</span></span>
         <span class="tb-tags"><span title="Turno">⏱️ ${s.turn}</span>
           <span title="Zumbis à vista" class="${seenZombies ? 'warn' : ''}">🧟 ${seenZombies}</span>
           <span title="Turnos até a próxima leva da horda" class="${nextWave <= 2 ? 'bad' : ''}">📣 ${nextWave}</span>

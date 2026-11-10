@@ -11,13 +11,16 @@
     "balance": "vite-node scripts/balance.ts",
     "build:edge": "esbuild src/server/game.ts --bundle --format=esm --platform=neutral --target=es2022 --outfile=supabase/functions/game/_game.js",
     "deploy:edge": "npm run build:edge && supabase functions deploy game --no-verify-jwt",
-    "smoke:online": "vite-node scripts/smoke-online.ts"
+    "smoke:online": "vite-node scripts/smoke-online.ts",
+    "art": "node scripts/art.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
     "phaser": "3.90.0"
   },
   "devDependencies": {
+    "@fontsource/special-elite": "^5.3.0",
+    "sharp": "^0.35.5",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.2.4"

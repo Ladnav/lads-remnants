@@ -1,13 +1,15 @@
+import '@fontsource/special-elite/latin-400.css';
 import Phaser from 'phaser';
 import { RESOURCES, type ResourceId } from './data/shelter';
+import { banner, faceLargeUrl, faceUrl } from './game/art';
 import { GalleryScene } from './game/GalleryScene';
-import { TILE, WALL_H } from './game/oblique';
+import { RES, TILE, WALL_H } from './game/oblique';
 import { RaidScene } from './game/RaidScene';
 import { RaidUi } from './game/raidUi';
 import { RegionScene } from './game/RegionScene';
 import { ShelterScene } from './game/ShelterScene';
 import { ensureLook, survivorLook } from './game/sprites';
-import { SHOWN_RESOURCES, ShelterUi, clock, diaryHtml, fmt, type View } from './game/shelterUi';
+import { SHOWN_RESOURCES, ShelterUi, clock, diaryHtml, fmt, profileHtml, type View } from './game/shelterUi';
 import { LocalBackend, type Backend } from './net/backend';
 import { SupabaseBackend } from './net/supabase';
 import { applyCommand, type RaidRequest } from './server/game';
@@ -43,6 +45,8 @@ const raidScene = new RaidScene(() => raidUi.render());
 const portraits = new Map<string, string>();
 /** Recorta o quadro de frente do sprite para usar como retrato no painel. */
 function portrait(id: string): string | null {
+  const painted = faceUrl(id);
+  if (painted) return painted;
   const cached = portraits.get(id);
   if (cached) return cached;
   if (!shelterScene.ready) return null;
@@ -89,6 +93,7 @@ const shelterUi = new ShelterUi({ hud, top: topbar, ticker }, {
   account: () => backend.account(),
   linkEmail: (email) => backend.linkEmail(email),
   portrait,
+  profile: (id) => showProfile(id),
 });
 const raidUi = new RaidUi(raidScene, hud, overlay, topbar, ticker);
 regionScene.setSelectHandler((id) => shelterUi.select(id));
@@ -96,10 +101,11 @@ regionScene.setSelectHandler((id) => shelterUi.select(id));
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: MAP_W * TILE,
-  height: MAP_H * TILE + WALL_H,
-  backgroundColor: '#0a0908',
-  pixelArt: true,
+  width: MAP_W * TILE * RES,
+  height: (MAP_H * TILE + WALL_H) * RES,
+  backgroundColor: '#070707',
+  // A pintura usa filtro suave; os bonecos de pixel art pedem o filtro deles (ver sprites.ts).
+  pixelArt: false,
   scene: [],
   callbacks: {
     postBoot: (g) => {
@@ -125,11 +131,11 @@ function adopt(s: ShelterState): void {
 }
 
 async function boot(): Promise<void> {
-  modal(`<h1>LADS REMNANTS</h1><p>${backend.online ? 'Conectando ao abrigo…' : 'Abrindo o abrigo…'}</p>`);
+  modal(`${banner('title', 'hero')}<h1>LADS REMNANTS</h1><p>${backend.online ? 'Conectando ao abrigo…' : 'Abrindo o abrigo…'}</p>`);
   try {
     shelter = await backend.load();
   } catch (e) {
-    modal(`<h1>LADS REMNANTS</h1>
+    modal(`${banner('title', 'hero')}<h1>LADS REMNANTS</h1>
       <p class="bad">Não foi possível falar com o servidor: ${(e as Error).message}</p>
       <div class="actions"><button class="primary" id="retry">Tentar de novo</button><button id="offline">Jogar offline</button></div>`);
     document.getElementById('retry')!.addEventListener('click', () => void boot());
@@ -271,6 +277,7 @@ function showReport(since: number, resBefore: ShelterState['seenResources'], ali
   const lost = shelter.survivors.filter((v) => aliveBefore.includes(v.id) && !aliveNow.includes(v.id));
   const joined = shelter.survivors.filter((v) => aliveBefore.length && !aliveBefore.includes(v.id) && aliveNow.includes(v.id));
   modal(`
+      ${banner('title', 'hero')}
       <h1>LADS REMNANTS</h1>
       <h2>Enquanto você esteve fora</h2>
       <p>Passaram ${hours} horas no abrigo (${clock(since)} → ${clock(shelter.hour)}).</p>
@@ -290,6 +297,24 @@ function showReport(since: number, resBefore: ShelterState['seenResources'], ali
   });
 }
 
+/** Ficha do personagem, com setas para passar pelos outros. */
+function showProfile(id: string): void {
+  const list = shelter.survivors;
+  const i = list.findIndex((v) => v.id === id);
+  if (i < 0) return;
+  const v = list[i];
+  modal(`${profileHtml(shelter, v, faceLargeUrl(v.id) ?? portrait(v.id))}
+      <div class="actions profile-nav"><button id="p-prev">◀ ${list[(i + list.length - 1) % list.length].name}</button><button class="primary" id="p-close">Fechar</button><button id="p-next">${list[(i + 1) % list.length].name} ▶</button></div>`);
+  overlay.querySelector('.modal')!.classList.add('wide');
+  const close = () => overlay.classList.add('hidden');
+  document.getElementById('p-close')!.addEventListener('click', close);
+  document.getElementById('p-prev')!.addEventListener('click', () => showProfile(list[(i + list.length - 1) % list.length].id));
+  document.getElementById('p-next')!.addEventListener('click', () => showProfile(list[(i + 1) % list.length].id));
+  overlay.onclick = (e) => {
+    if (e.target === overlay && document.getElementById('p-close')) close();
+  };
+}
+
 function showGameOver(): void {
   if (!overlay.classList.contains('hidden')) return;
   const fate = (v: ShelterState['survivors'][number]) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`;
@@ -302,6 +327,7 @@ function showGameOver(): void {
     : `<h2 class="bad">A comunidade acabou</h2>
       <p>Resistiram até o dia ${dayOf(shelter.hour)}. ${shelter.survivors.map(fate).join(', ')}.</p>`;
   modal(`
+      ${banner(end ? 'ending-boat' : 'ending-dead', 'hero')}
       ${head}
       <div class="log report">${diaryHtml(shelter.diary.slice(-15))}</div>
       <div class="actions" style="margin-top:12px"><button class="primary" id="restart">${end ? 'Começar outra história' : 'Começar de novo'}</button></div>`);

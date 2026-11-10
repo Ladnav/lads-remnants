@@ -235,6 +235,7 @@ const VIEWS: View[] = ['down', 'up', 'side'];
 export function ensureLook(scene: Phaser.Scene, L: Look): string {
   if (scene.textures.exists(L.key)) return L.key;
   const tex = scene.textures.createCanvas(L.key, FRAME_W * 3, FRAME_H * 4)!;
+  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
   const ctx = tex.getContext();
   const blit = (grid: Grid, col: number, row: number, name: string) => {
     for (let i = 0; i < grid.length; i++) {

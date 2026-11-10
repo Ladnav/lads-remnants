@@ -1,0 +1,325 @@
+{
+  "note": "Custo estimado pelos tokens que a API devolve; o saldo real está no painel do Google. As cinco primeiras entradas são do teste inicial, sem contagem exata de tokens.",
+  "entries": [
+    {
+      "at": "2026-11-10T21:14:00.000Z",
+      "job": "shelter",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 800,
+      "textTokens": 0,
+      "imageTokens": 1120,
+      "usd": 0.136,
+      "estimated": true
+    },
+    {
+      "at": "2026-11-10T21:14:00.000Z",
+      "job": "market",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 200,
+      "textTokens": 0,
+      "imageTokens": 1120,
+      "usd": 0.1348,
+      "estimated": true
+    },
+    {
+      "at": "2026-11-10T21:14:00.000Z",
+      "job": "marta",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 200,
+      "textTokens": 0,
+      "imageTokens": 1120,
+      "usd": 0.1348,
+      "estimated": true
+    },
+    {
+      "at": "2026-11-10T21:14:00.000Z",
+      "job": "iuri",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 200,
+      "textTokens": 0,
+      "imageTokens": 1120,
+      "usd": 0.1348,
+      "estimated": true
+    },
+    {
+      "at": "2026-11-10T21:14:00.000Z",
+      "job": "lena",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 200,
+      "textTokens": 0,
+      "imageTokens": 1120,
+      "usd": 0.1348,
+      "estimated": true
+    },
+    {
+      "at": "2026-11-10T21:20:33.869Z",
+      "job": "bruno",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 201,
+      "textTokens": 525,
+      "imageTokens": 1120,
+      "usd": 0.1411
+    },
+    {
+      "at": "2026-11-10T21:20:49.366Z",
+      "job": "ana",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 196,
+      "textTokens": 481,
+      "imageTokens": 1120,
+      "usd": 0.1406
+    },
+    {
+      "at": "2026-11-10T21:21:03.896Z",
+      "job": "caio",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 191,
+      "textTokens": 477,
+      "imageTokens": 1120,
+      "usd": 0.1405
+    },
+    {
+      "at": "2026-11-10T21:21:18.751Z",
+      "job": "dona_rita",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 202,
+      "textTokens": 396,
+      "imageTokens": 1120,
+      "usd": 0.1396
+    },
+    {
+      "at": "2026-11-10T21:21:33.753Z",
+      "job": "teo",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 200,
+      "textTokens": 522,
+      "imageTokens": 1120,
+      "usd": 0.1411
+    },
+    {
+      "at": "2026-11-10T21:21:49.668Z",
+      "job": "garage",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 164,
+      "textTokens": 423,
+      "imageTokens": 1120,
+      "usd": 0.1398
+    },
+    {
+      "at": "2026-11-10T21:22:07.602Z",
+      "job": "pharmacy",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 162,
+      "textTokens": 485,
+      "imageTokens": 1120,
+      "usd": 0.1405
+    },
+    {
+      "at": "2026-11-10T21:22:21.885Z",
+      "job": "hospital",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 160,
+      "textTokens": 440,
+      "imageTokens": 1120,
+      "usd": 0.14
+    },
+    {
+      "at": "2026-11-10T21:22:38.396Z",
+      "job": "police",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 160,
+      "textTokens": 417,
+      "imageTokens": 1120,
+      "usd": 0.1397
+    },
+    {
+      "at": "2026-11-10T21:22:53.318Z",
+      "job": "title",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 156,
+      "textTokens": 407,
+      "imageTokens": 1120,
+      "usd": 0.1396
+    },
+    {
+      "at": "2026-11-10T21:23:08.720Z",
+      "job": "door",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 153,
+      "textTokens": 530,
+      "imageTokens": 1120,
+      "usd": 0.1411
+    },
+    {
+      "at": "2026-11-10T21:23:22.975Z",
+      "job": "raiders",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 135,
+      "textTokens": 384,
+      "imageTokens": 1120,
+      "usd": 0.1393
+    },
+    {
+      "at": "2026-11-10T21:23:36.943Z",
+      "job": "ending-boat",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 155,
+      "textTokens": 397,
+      "imageTokens": 1120,
+      "usd": 0.1395
+    },
+    {
+      "at": "2026-11-10T21:23:53.384Z",
+      "job": "ending-dead",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 152,
+      "textTokens": 450,
+      "imageTokens": 1120,
+      "usd": 0.1401
+    },
+    {
+      "at": "2026-11-10T21:31:19.510Z",
+      "job": "tex-wood",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 97,
+      "textTokens": 397,
+      "imageTokens": 1120,
+      "usd": 0.1394
+    },
+    {
+      "at": "2026-11-10T21:31:34.214Z",
+      "job": "prop-bed",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 176,
+      "textTokens": 455,
+      "imageTokens": 1120,
+      "usd": 0.1402
+    },
+    {
+      "at": "2026-11-10T21:31:50.536Z",
+      "job": "prop-stove",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 164,
+      "textTokens": 404,
+      "imageTokens": 1120,
+      "usd": 0.1396
+    },
+    {
+      "at": "2026-11-10T21:32:23.255Z",
+      "job": "tex-tile",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 93,
+      "textTokens": 304,
+      "imageTokens": 1120,
+      "usd": 0.1382
+    },
+    {
+      "at": "2026-11-10T21:32:38.809Z",
+      "job": "tex-concrete",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 87,
+      "textTokens": 363,
+      "imageTokens": 1120,
+      "usd": 0.1389
+    },
+    {
+      "at": "2026-11-10T21:32:55.709Z",
+      "job": "tex-yard",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 90,
+      "textTokens": 365,
+      "imageTokens": 1120,
+      "usd": 0.139
+    },
+    {
+      "at": "2026-11-10T21:33:09.710Z",
+      "job": "tex-walltop",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 94,
+      "textTokens": 342,
+      "imageTokens": 1120,
+      "usd": 0.1387
+    },
+    {
+      "at": "2026-11-10T21:33:24.068Z",
+      "job": "tex-wallface",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 101,
+      "textTokens": 342,
+      "imageTokens": 1120,
+      "usd": 0.1387
+    },
+    {
+      "at": "2026-11-10T21:33:39.055Z",
+      "job": "prop-workbench",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 164,
+      "textTokens": 465,
+      "imageTokens": 1120,
+      "usd": 0.1403
+    },
+    {
+      "at": "2026-11-10T21:33:53.725Z",
+      "job": "prop-filter",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 168,
+      "textTokens": 412,
+      "imageTokens": 1120,
+      "usd": 0.1397
+    },
+    {
+      "at": "2026-11-10T21:34:07.796Z",
+      "job": "prop-latrine",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 161,
+      "textTokens": 444,
+      "imageTokens": 1120,
+      "usd": 0.1401
+    },
+    {
+      "at": "2026-11-10T21:34:22.953Z",
+      "job": "prop-radio",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 165,
+      "textTokens": 497,
+      "imageTokens": 1120,
+      "usd": 0.1407
+    },
+    {
+      "at": "2026-11-10T21:34:37.130Z",
+      "job": "prop-collector",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 161,
+      "textTokens": 375,
+      "imageTokens": 1120,
+      "usd": 0.1392
+    },
+    {
+      "at": "2026-11-10T21:34:51.403Z",
+      "job": "prop-garden",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 165,
+      "textTokens": 429,
+      "imageTokens": 1120,
+      "usd": 0.1399
+    },
+    {
+      "at": "2026-11-10T21:35:07.220Z",
+      "job": "prop-barricade",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 168,
+      "textTokens": 412,
+      "imageTokens": 1120,
+      "usd": 0.1397
+    },
+    {
+      "at": "2026-11-10T21:35:21.928Z",
+      "job": "prop-crates",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 156,
+      "textTokens": 497,
+      "imageTokens": 1120,
+      "usd": 0.1407
+    }
+  ]
+}

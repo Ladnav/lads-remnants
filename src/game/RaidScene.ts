@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { idx } from '../sim/raid/grid';
 import { computeVisible, exitStatus } from '../sim/raid/raid';
 import type { RaidState, Tile, Vec } from '../sim/raid/types';
-import { TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, shade, wall } from './oblique';
+import { RES, TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, shade, wall } from './oblique';
 import { Actor, survivorLook, zombieLook } from './sprites';
 
 export { TILE } from './oblique';
@@ -146,7 +146,8 @@ export class RaidScene extends Phaser.Scene {
       // Câmera próxima, seguindo o sobrevivente: a névoa esconde o resto mesmo.
       this.cameras.main
         .setBounds(0, -WALL_H, s.width * TILE, s.height * TILE + WALL_H)
-        .setZoom(1.7)
+        .setOrigin(0.5, 0.5)
+        .setZoom(1.7 * RES)
         .startFollow(this.player.container, true, 0.12, 0.12, 0, 10);
     }
     this.moveTo(this.player, s.player);
