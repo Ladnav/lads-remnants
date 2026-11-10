@@ -22,7 +22,7 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
   contorno escuro, exportados como data URL). Emojis mudam de cara em cada aparelho.
 - [x] **Balões de status no abrigo.** Os balões acima das cabeças (`statusIcon` em
   `src/game/ShelterScene.ts`) ainda são emojis; trocar pelos ícones do item anterior.
-- [ ] **Mapa da região no nível do abrigo.** Em `src/game/RegionScene.ts`: sombra na base dos
+- [x] **Mapa da região no nível do abrigo.** Em `src/game/RegionScene.ts`: sombra na base dos
   prédios, variação nas ruas e quadras, noite com focos de luz usando `src/game/night.ts`,
   chuva quando `s.raining`.
 - [ ] **Incursão no nível do abrigo.** Em `src/game/RaidScene.ts`: variação do piso por tile,

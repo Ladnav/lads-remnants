@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { LOCATIONS, SHELTER_POS } from '../data/shelter';
 import { hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState } from '../sim/shelter/types';
+import { ensureIcon, iconFor } from './icons';
+import { NightLight, makeRain, type LightSource } from './night';
 import { TILE, WALL_H, box, setupObliqueCamera, shade } from './oblique';
 import { Actor, survivorLook } from './sprites';
 
@@ -38,7 +40,8 @@ export class RegionScene extends Phaser.Scene {
   private gfx!: Phaser.GameObjects.Graphics;
   private routes!: Phaser.GameObjects.Graphics;
   private labels: Phaser.GameObjects.GameObject[] = [];
-  private night!: Phaser.GameObjects.Rectangle;
+  private night!: NightLight;
+  private rain!: Phaser.GameObjects.Particles.ParticleEmitter;
   private onSelect: (id: string) => void = () => {};
   private onReady: () => void;
 
@@ -59,7 +62,9 @@ export class RegionScene extends Phaser.Scene {
     this.drawCity();
     this.gfx = this.add.graphics().setDepth(20);
     this.routes = this.add.graphics().setDepth(30);
-    this.night = this.add.rectangle(0, -WALL_H, W * TILE, H * TILE + WALL_H, 0x0b1630, 0).setOrigin(0).setDepth(1000);
+    this.night = new NightLight(this, W * TILE, H * TILE + WALL_H);
+    this.rain = makeRain(this, 0, -WALL_H - 40, W * TILE + 40, H * TILE, 8);
+    this.time.addEvent({ delay: 170, loop: true, callback: () => this.night.flicker() });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       const hit = LOCATIONS.find((l) => {
         const r = landmark(l.pos);
@@ -80,12 +85,41 @@ export class RegionScene extends Phaser.Scene {
         g.fillStyle(0x3a372f).fillRect(bx * TILE + 3, by * TILE + 3, 4 * TILE - 6, 3 * TILE - 6);
       }
     }
+    // Asfalto gasto: remendos, rachaduras e mato nas calçadas.
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const h = spot(x, y);
+        const street = y % 4 === 3 || x % 5 === 4;
+        if (street) {
+          if (h % 4 === 0) g.fillStyle(0x23211d, 0.8).fillEllipse(x * TILE + 6 + (h % 14), y * TILE + 8 + (h % 11), 14 + (h % 9), 7);
+          if (h % 9 === 0) g.lineStyle(1, 0x191815, 0.9).lineBetween(x * TILE + (h % 12), y * TILE + 3, x * TILE + 10 + (h % 14), y * TILE + TILE - 4);
+          if (h % 23 === 0) g.fillStyle(0x141311).fillCircle(x * TILE + 14, y * TILE + 14, 4).lineStyle(1, 0x4a4840).strokeCircle(x * TILE + 14, y * TILE + 14, 4);
+        } else if (h % 3 === 0) {
+          g.fillStyle(h % 2 ? 0x3f4a2a : 0x34362c, 0.8).fillRect(x * TILE + (h % 22), y * TILE + ((h >> 2) % 20), 3, 2 + (h % 3));
+        }
+      }
+    }
+    // Carros largados no meio da rua.
+    const cars: [number, number, number][] = [[2, 3, 0x6b3a32], [11, 7, 0x4a5560], [21, 11, 0x6a6452], [7, 15, 0x3f4f44], [17, 3, 0x56443a], [25, 15, 0x4a4a52], [9, 11, 0x5a3f3a]];
+    for (const [cx, cy, color] of cars) {
+      const px = cx * TILE + 3;
+      const py = cy * TILE + 9;
+      g.fillStyle(0x000000, 0.35).fillRect(px + 3, py + 11, 22, 4);
+      box(g, px, py + 5, 22, 10, 5, color);
+      g.fillStyle(0x1c2226).fillRect(px + 5, py + 1, 12, 5);
+    }
     // Faixas das ruas
     g.lineStyle(2, 0x6a6352, 0.5);
     for (let y = 3; y < H; y += 4) for (let x = 0; x < W * TILE; x += 22) g.lineBetween(x, y * TILE + TILE / 2, x + 10, y * TILE + TILE / 2);
     // Rio no lugar de uma avenida, com pontes nas ruas
     g.fillStyle(0x1f3a4d).fillRect(RIVER_X * TILE - 8, -WALL_H, TILE + 16, H * TILE + WALL_H);
     g.fillStyle(0x2c5068).fillRect(RIVER_X * TILE - 2, -WALL_H, 4, H * TILE + WALL_H);
+    for (let y = 0; y < H * 2; y++) {
+      const h = spot(y, 99);
+      g.fillStyle(0x3a6682, 0.6).fillRect(RIVER_X * TILE - 4 + (h % 30), y * 14 - WALL_H + (h % 9), 6 + (h % 5), 1);
+    }
+    // Margens escuras do rio.
+    g.fillStyle(0x000000, 0.3).fillRect(RIVER_X * TILE - 8, -WALL_H, 3, H * TILE + WALL_H).fillRect(RIVER_X * TILE + TILE + 5, -WALL_H, 3, H * TILE + WALL_H);
     for (let y = 3; y < H; y += 4) {
       g.fillStyle(0x5a5346).fillRect(RIVER_X * TILE - 10, y * TILE + 2, TILE + 20, TILE - 4);
       g.fillStyle(0x6d665b).fillRect(RIVER_X * TILE - 10, y * TILE + 2, TILE + 20, 3).fillRect(RIVER_X * TILE - 10, y * TILE + TILE - 5, TILE + 20, 3);
@@ -107,7 +141,11 @@ export class RegionScene extends Phaser.Scene {
           if (r.x + r.w > W * TILE || reserved.some((q) => overlaps(q, r))) continue;
           const h = 14 + ((seed + ox) % 3) * 6;
           const roof = roofs[(seed + ox) % roofs.length];
+          shadow(b, r, h);
           box(b, r.x, r.y + h, r.w, r.d, h, roof, true, shade(roof, 0.55));
+          // Caixa d'água e remendo no telhado.
+          b.fillStyle(shade(roof, 0.8)).fillRect(r.x + 5 + ((seed * 7) % Math.max(4, r.w - 22)), r.y + 5, 9, 7);
+          if ((seed + ox) % 2) b.fillStyle(shade(roof, 1.15)).fillRect(r.x + r.w - 14, r.y + r.d - 12, 8, 6);
           // Janelas na fachada
           for (let wx = r.x + 5; wx < r.x + r.w - 6; wx += 9) b.fillStyle(0x1c1a17).fillRect(wx, r.y + r.d + 3, 4, 5);
         }
@@ -127,9 +165,12 @@ export class RegionScene extends Phaser.Scene {
     // Abrigo: casa com telhado e muro
     const hx = SHELTER_POS[0] * TILE - TILE * 0.7;
     const hy = SHELTER_POS[1] * TILE - TILE * 0.2;
-    box(g, hx, hy + 20, TILE * 2.4, TILE * 1.3, 20, 0x6a8a3a, true, 0x8a6a4a);
+    shadow(g, { x: hx, y: hy, w: TILE * 2.4, d: TILE * 1.3 }, 20);
+    box(g, hx, hy + 20, TILE * 2.4, TILE * 1.3, 20, 0x8a4a3a, true, 0x8a6a4a);
     g.fillStyle(0x3a2a1a).fillRect(hx + TILE * 1.05, hy + TILE * 1.3 + 8, 10, 12);
-    this.text(home.x, hy - 6, '🏠', 16, 25);
+    // Janela acesa: tem gente em casa.
+    g.fillStyle(0xe0a04a).fillRect(hx + 8, hy + TILE * 1.3 + 7, 7, 7);
+    this.ico(home.x, hy - 10, 'home', 18, 25);
     this.label(home.x, hy + TILE * 1.3 + 22, 'Abrigo', '#8fbf5a');
 
     for (const l of LOCATIONS) {
@@ -137,18 +178,21 @@ export class RegionScene extends Phaser.Scene {
       const known = s.discovered.includes(l.id);
       const h = 24 + l.danger * 4;
       if (!known) {
+        shadow(g, rect, h);
         box(g, rect.x, rect.y + h, rect.w, rect.d, h, 0x2a2824, true, 0x1c1b18);
         this.text(rect.x + rect.w / 2, rect.y + rect.d / 2, '?', 18, 25, '#6a6355');
         this.label(rect.x + rect.w / 2, rect.y + rect.d + h + 2, '???', '#6a6355');
         continue;
       }
       const roof = ROOF_COLOR[l.id] ?? 0x6a5a4a;
+      shadow(g, rect, h);
       box(g, rect.x, rect.y + h, rect.w, rect.d, h, roof, true, shade(roof, 0.5));
       for (let wx = rect.x + 6; wx < rect.x + rect.w - 8; wx += 11) g.fillStyle(0x15140f).fillRect(wx, rect.y + rect.d + 4, 5, 7);
       // Contorno: cor do perigo, ou clara se selecionado.
       g.lineStyle(selected === l.id ? 3 : 2, selected === l.id ? 0xf1ebe0 : DANGER_COLOR[l.danger]).strokeRect(rect.x - 1, rect.y - 1, rect.w + 2, rect.d + h + 2);
-      this.text(rect.x + rect.w / 2, rect.y + rect.d / 2, l.icon, 17, 25);
-      this.label(rect.x + rect.w / 2, rect.y + rect.d + h + 2, `${l.name} ${'💀'.repeat(l.danger)}`, '#f1ebe0');
+      this.ico(rect.x + rect.w / 2, rect.y + rect.d / 2, iconFor(l.icon) ?? 'map', 22, 25);
+      const name = this.label(rect.x + rect.w / 2 - l.danger * 5, rect.y + rect.d + h + 2, l.name, '#f1ebe0');
+      for (let i = 0; i < l.danger; i++) this.ico(name.x + name.width / 2 + 8 + i * 11, name.y + 7, 'skull', 11, 28);
       const stock = (s.locationStock[l.id] ?? 100) / 100;
       const sy = rect.y + rect.d + h + 18;
       g.fillStyle(0x1c1a17).fillRect(rect.x + rect.w / 2 - 22, sy, 44, 4);
@@ -158,7 +202,7 @@ export class RegionScene extends Phaser.Scene {
         const ring = this.add.ellipse(rect.x + rect.w / 2, rect.y + rect.d / 2, rect.w + 10, rect.d + 10).setStrokeStyle(3, 0xe0573a).setDepth(26);
         this.tweens.add({ targets: ring, scaleX: 1.4, scaleY: 1.4, alpha: 0, duration: 900, repeat: -1 });
         this.labels.push(ring);
-        this.text(rect.x - 4, rect.y - 8, '🚨', 16, 27);
+        this.ico(rect.x - 4, rect.y - 8, 'siren', 18, 27);
       }
     }
 
@@ -187,8 +231,20 @@ export class RegionScene extends Phaser.Scene {
       }
     }
 
+    // À noite só se vê o abrigo e onde há gente de lanterna.
     const hr = hourOfDay(s.hour);
-    this.night.setFillStyle(0x0b1630, isNight(hr) ? 0.45 : hr === 20 || hr === 6 ? 0.2 : 0);
+    const lights: LightSource[] = [{ x: home.x, y: home.y + 6, r: 105 }];
+    for (const e of s.expeditions) {
+      if (!e.departed) continue;
+      const to = center(LOCATIONS.find((x) => x.id === e.locationId)!.pos);
+      lights.push({ x: to.x + TILE, y: to.y + 6, r: 80 });
+    }
+    this.night.set(isNight(hr) ? 0.62 : hr === 20 || hr === 6 ? 0.32 : 0, lights);
+    if (this.rain.emitting !== s.raining) s.raining ? this.rain.start() : this.rain.stop();
+  }
+
+  private ico(x: number, y: number, name: string, size: number, depth: number): void {
+    this.labels.push(this.add.image(x, y, ensureIcon(this, name)).setDisplaySize(size, size).setDepth(depth));
   }
 
   private text(x: number, y: number, t: string, size: number, depth: number, color = '#f1ebe0'): void {
@@ -197,14 +253,23 @@ export class RegionScene extends Phaser.Scene {
     );
   }
 
-  private label(x: number, y: number, text: string, color: string): void {
-    this.labels.push(
-      this.add
-        .text(x, y, text, { fontFamily: 'monospace', fontSize: '10px', color, backgroundColor: '#0f0e0cd9', padding: { x: 3, y: 1 } })
-        .setOrigin(0.5, 0)
-        .setDepth(28),
-    );
+  private label(x: number, y: number, text: string, color: string): Phaser.GameObjects.Text {
+    const t = this.add
+      .text(x, y, text, { fontFamily: '"Special Elite", monospace', fontSize: '10px', color, backgroundColor: '#0f0e0cd9', padding: { x: 3, y: 2 } })
+      .setOrigin(0.5, 0)
+      .setDepth(28);
+    this.labels.push(t);
+    return t;
   }
+}
+
+/** Número estável por tile, para variar o chão sem sortear a cada desenho. */
+const spot = (x: number, y: number): number => (((x * 73856093) ^ (y * 19349663)) >>> 0) % 1000;
+
+/** Sombra que o prédio joga no chão, para baixo e para a direita. */
+function shadow(g: Phaser.GameObjects.Graphics, r: Rect, h: number): void {
+  g.fillStyle(0x000000, 0.32).fillRect(r.x + 5, r.y + r.d + h, r.w, 5);
+  g.fillStyle(0x000000, 0.32).fillRect(r.x + r.w, r.y + 8, 5, r.d + h - 3);
 }
 
 function dashed(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number, color: number, alpha: number): void {

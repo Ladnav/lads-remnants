@@ -71,3 +71,26 @@ export class NightLight {
     this.tex.refresh();
   }
 }
+
+/** Chuva caindo dentro de um retângulo da cena. Começa parada: ligue com start(). */
+export function makeRain(scene: Phaser.Scene, x0: number, y0: number, x1: number, y1: number, quantity = 3): Phaser.GameObjects.Particles.ParticleEmitter {
+  if (!scene.textures.exists('drop')) {
+    const g = scene.make.graphics({ x: 0, y: 0 }, false);
+    g.fillStyle(0xbfd4e6).fillRect(0, 0, 1, 7);
+    g.generateTexture('drop', 1, 7);
+    g.destroy();
+  }
+  return scene.add
+    .particles(0, 0, 'drop', {
+      x: { min: x0, max: x1 },
+      y: { min: y0, max: y1 },
+      lifespan: 260,
+      speedY: { min: 220, max: 300 },
+      speedX: -35,
+      alpha: { start: 0.55, end: 0 },
+      quantity,
+      frequency: 30,
+      emitting: false,
+    })
+    .setDepth(90000);
+}

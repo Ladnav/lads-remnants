@@ -3,7 +3,7 @@ import { emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 import { TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, wall } from './oblique';
 import { ensureIcon, iconFor } from './icons';
-import { NightLight, type LightSource } from './night';
+import { NightLight, makeRain, type LightSource } from './night';
 import { Actor, survivorLook, type Pose } from './sprites';
 
 const W = 28;
@@ -189,25 +189,7 @@ export class ShelterScene extends Phaser.Scene {
     this.time.addEvent({ delay: 1400, loop: true, callback: () => this.fidget() });
     this.time.addEvent({ delay: 170, loop: true, callback: () => this.night.flicker() });
     // Chuva no quintal, a única parte da casa sem telhado.
-    if (!this.textures.exists('drop')) {
-      const g = this.make.graphics({ x: 0, y: 0 }, false);
-      g.fillStyle(0xbfd4e6).fillRect(0, 0, 1, 7);
-      g.generateTexture('drop', 1, 7);
-      g.destroy();
-    }
-    this.rain = this.add
-      .particles(0, 0, 'drop', {
-        x: { min: 19 * TILE, max: 27 * TILE },
-        y: { min: 8 * TILE, max: 18 * TILE },
-        lifespan: 260,
-        speedY: { min: 220, max: 300 },
-        speedX: -35,
-        alpha: { start: 0.55, end: 0 },
-        quantity: 3,
-        frequency: 30,
-        emitting: false,
-      })
-      .setDepth(90000);
+    this.rain = makeRain(this, 19 * TILE, 8 * TILE, 27 * TILE, 18 * TILE);
     this.onReady();
   }
 
