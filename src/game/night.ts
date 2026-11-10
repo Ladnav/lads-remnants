@@ -12,6 +12,8 @@ export class NightLight {
   private tex: Phaser.Textures.CanvasTexture;
   private image: Phaser.GameObjects.Image;
   private last = '';
+  private dark = 0;
+  private sources: LightSource[] = [];
 
   constructor(
     scene: Phaser.Scene,
@@ -27,6 +29,19 @@ export class NightLight {
     const sig = `${dark}|${sources.map((s) => `${s.x},${s.y},${s.r}`).join(';')}`;
     if (sig === this.last) return;
     this.last = sig;
+    this.dark = dark;
+    this.sources = sources;
+    this.paint(sources);
+  }
+
+  /** A chama treme: os focos mudam um pouco de tamanho. Só trabalha quando está escuro. */
+  flicker(): void {
+    if (this.dark <= 0) return;
+    this.paint(this.sources.map((s) => ({ ...s, r: s.r * (0.96 + Math.random() * 0.08) })));
+  }
+
+  private paint(sources: LightSource[]): void {
+    const dark = this.dark;
     const ctx = this.tex.getContext();
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, this.w, this.h);

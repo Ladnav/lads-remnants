@@ -73,6 +73,71 @@ const isWall = (() => {
 
 const isYard = (x: number, y: number) => x >= 19 && y >= 9 && y <= 18;
 
+/** Número estável por tile, para variar o chão sem sortear a cada desenho. */
+const hash = (x: number, y: number, k = 0): number => (((x * 73856093) ^ (y * 19349663) ^ (k * 83492791)) >>> 0) % 1000;
+
+type FloorKind = 'yard' | 'tile' | 'concrete' | 'wood';
+/** Piso de cada cômodo: quintal de terra, cozinha e latrina de azulejo, oficina e depósito de cimento. */
+const floorOf = (x: number, y: number): FloorKind => {
+  if (isYard(x, y)) return 'yard';
+  if (x >= 19) return 'concrete';
+  if (x >= 11 && x <= 17 && y <= 7) return 'tile';
+  if (y >= 15 && x <= 5) return 'tile';
+  if (y >= 15 && x >= 7 && x <= 17) return 'concrete';
+  return 'wood';
+};
+
+function floorTile(f: Phaser.GameObjects.Graphics, x: number, y: number, px: number, py: number): void {
+  const h = hash(x, y);
+  switch (floorOf(x, y)) {
+    case 'yard': {
+      f.fillStyle([0x3b4a24, 0x37451f, 0x3f4a26, 0x414427][h % 4]).fillRect(px, py, TILE, TILE);
+      // Terra batida e tufos de mato.
+      if (h % 5 === 0) f.fillStyle(0x4a3f2a, 0.7).fillEllipse(px + 8 + (h % 12), py + 10 + (h % 9), 16, 9);
+      for (let k = 0; k < 3; k++) {
+        const t = hash(x, y, k + 1);
+        f.fillStyle(t % 3 ? 0x4c5e2e : 0x5d6b33).fillRect(px + (t % 25), py + ((t >> 3) % 22) + 2, 2, 3 + (t % 3));
+      }
+      break;
+    }
+    case 'tile': {
+      f.fillStyle(h % 7 ? 0x6a665a : 0x5f5b50).fillRect(px, py, TILE, TILE);
+      f.lineStyle(1, 0x45423a, 0.9);
+      for (let k = 0; k <= TILE; k += 7) {
+        f.lineBetween(px + k, py, px + k, py + TILE);
+        f.lineBetween(px, py + k, px + TILE, py + k);
+      }
+      // Azulejo quebrado e encardido aqui e ali.
+      if (h % 6 === 0) f.fillStyle(0x3d3a33).fillRect(px + 7 * (h % 4), py + 7 * ((h >> 2) % 4), 7, 7);
+      if (h % 9 === 0) f.fillStyle(0x4a4030, 0.5).fillEllipse(px + 14, py + 14, 20, 12);
+      break;
+    }
+    case 'concrete': {
+      f.fillStyle([0x504d47, 0x4c4943, 0x54514a][h % 3]).fillRect(px, py, TILE, TILE);
+      if (h % 4 === 0) f.fillStyle(0x3f3c37, 0.6).fillEllipse(px + 6 + (h % 16), py + 8 + (h % 13), 14 + (h % 8), 8);
+      if (h % 7 === 0) {
+        // Rachadura.
+        f.lineStyle(1, 0x2f2d29, 0.9).lineBetween(px + (h % 10), py + 2, px + 12 + (h % 9), py + 14);
+        f.lineBetween(px + 12 + (h % 9), py + 14, px + 8 + (h % 14), py + TILE - 2);
+      }
+      break;
+    }
+    default: {
+      // Tábuas: cada uma num tom, com emendas, nós e manchas.
+      for (const half of [0, 1]) {
+        const t = hash(x, y, half + 7);
+        f.fillStyle([0x4a3b2c, 0x46382a, 0x4e3e2e, 0x433527][t % 4]).fillRect(px, py + half * (TILE / 2), TILE, TILE / 2);
+        const joint = (x + y + half) % 2 ? 8 : 20;
+        f.lineStyle(1, 0x33281d, 0.9).lineBetween(px + joint, py + half * (TILE / 2), px + joint, py + (half + 1) * (TILE / 2));
+        if (t % 9 === 0) f.fillStyle(0x33281d).fillRect(px + 3 + (t % 20), py + half * (TILE / 2) + 5, 2, 2);
+      }
+      f.lineStyle(1, 0x33281d, 0.9).lineBetween(px, py + TILE / 2, px + TILE, py + TILE / 2);
+      f.lineBetween(px, py + TILE, px + TILE, py + TILE);
+      if (h % 13 === 0) f.fillStyle(0x2c2219, 0.45).fillEllipse(px + 14, py + 14, 22, 13);
+    }
+  }
+}
+
 interface Sprite {
   actor: Actor;
   body: Phaser.GameObjects.Container;
@@ -93,6 +158,7 @@ export class ShelterScene extends Phaser.Scene {
   private floor!: Phaser.GameObjects.Graphics;
   private rows: Phaser.GameObjects.Graphics[] = [];
   private night!: NightLight;
+  private rain!: Phaser.GameObjects.Particles.ParticleEmitter;
   private sprites = new Map<string, Sprite>();
   private decor: Phaser.GameObjects.GameObject[] = [];
   /** Tiles ocupados por móveis: ninguém atravessa, só chega neles. */
@@ -120,6 +186,27 @@ export class ShelterScene extends Phaser.Scene {
     }
     this.night = new NightLight(this, W * TILE, H * TILE + WALL_H);
     this.time.addEvent({ delay: 1400, loop: true, callback: () => this.fidget() });
+    this.time.addEvent({ delay: 170, loop: true, callback: () => this.night.flicker() });
+    // Chuva no quintal, a única parte da casa sem telhado.
+    if (!this.textures.exists('drop')) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(0xbfd4e6).fillRect(0, 0, 1, 7);
+      g.generateTexture('drop', 1, 7);
+      g.destroy();
+    }
+    this.rain = this.add
+      .particles(0, 0, 'drop', {
+        x: { min: 19 * TILE, max: 27 * TILE },
+        y: { min: 8 * TILE, max: 18 * TILE },
+        lifespan: 260,
+        speedY: { min: 220, max: 300 },
+        speedX: -35,
+        alpha: { start: 0.55, end: 0 },
+        quantity: 3,
+        frequency: 30,
+        emitting: false,
+      })
+      .setDepth(90000);
     this.onReady();
   }
 
@@ -133,6 +220,7 @@ export class ShelterScene extends Phaser.Scene {
     this.drawPeople(s);
     const h = hourOfDay(s.hour);
     this.night.set(isNight(h) ? 0.68 : h === 20 || h === 6 ? 0.38 : 0, this.lightSources(s));
+    if (this.rain.emitting !== s.raining) s.raining ? this.rain.start() : this.rain.stop();
   }
 
   private drawHouse(s: ShelterState): void {
@@ -148,15 +236,22 @@ export class ShelterScene extends Phaser.Scene {
         if (isWall(x, y)) continue;
         const px = x * TILE;
         const py = y * TILE;
-        if (isYard(x, y)) {
-          f.fillStyle((x * 7 + y * 3) % 5 ? 0x3b4a24 : 0x37451f).fillRect(px, py, TILE, TILE);
-          f.fillStyle(0x4c5e2e).fillRect(px + ((x * 13) % 20), py + ((y * 7) % 18) + 4, 2, 4);
-        } else {
-          // Tábuas de madeira
-          f.fillStyle(y % 2 ? 0x4a3b2c : 0x46382a).fillRect(px, py, TILE, TILE);
-          f.lineStyle(1, 0x3a2e22, 0.8).lineBetween(px, py + TILE / 2, px + TILE, py + TILE / 2);
-          f.lineBetween(px + ((x + y) % 2 ? 8 : 20), py, px + ((x + y) % 2 ? 8 : 20), py + TILE / 2);
+        floorTile(f, x, y, px, py);
+      }
+    }
+    // Sombra onde o chão encontra as paredes: dá peso à casa.
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (isWall(x, y)) continue;
+        const px = x * TILE;
+        const py = y * TILE;
+        if (isWall(x, y - 1)) {
+          f.fillStyle(0x000000, 0.3).fillRect(px, py, TILE, 4);
+          f.fillStyle(0x000000, 0.16).fillRect(px, py + 4, TILE, 5);
+          f.fillStyle(0x000000, 0.07).fillRect(px, py + 9, TILE, 5);
         }
+        if (isWall(x - 1, y)) f.fillStyle(0x000000, 0.16).fillRect(px, py, 4, TILE);
+        if (isWall(x + 1, y)) f.fillStyle(0x000000, 0.16).fillRect(px + TILE - 4, py, 4, TILE);
       }
     }
 
