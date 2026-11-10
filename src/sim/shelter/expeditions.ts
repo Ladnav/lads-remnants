@@ -6,6 +6,8 @@ import type { Expedition, ShelterState, ShelterSurvivor } from './types';
 
 /** Horas depois da partida em que uma expedição pode se meter em apuros. */
 const EMERGENCY_DELAY = 2;
+/** Horas de jogo, depois da volta do grupo, em que o encurralado ainda aguenta (12h reais). */
+const EMERGENCY_GRACE = 24;
 /** Encurralado e ninguém veio ajudar: o risco dobra. Deixar com a IA aumenta menos. */
 const EMERGENCY_DANGER = { pending: 2, ai: 1.5 } as const;
 
@@ -66,6 +68,15 @@ export function processExpeditions(s: ShelterState): void {
     }
     if (exp.departed && !exp.emergency && s.hour === exp.departHour + EMERGENCY_DELAY) maybeEmergency(s, exp);
     if (exp.departed && s.hour >= exp.returnHour) {
+      const em = exp.emergency;
+      if (em?.state === 'pending' && s.hour < em.deadline) {
+        // O grupo volta; o encurralado espera a decisão do jogador.
+        if (!em.held) {
+          em.held = true;
+          resolveExpedition(s, exp, em.survivorId);
+        }
+        continue;
+      }
       resolveExpedition(s, exp);
       s.expeditions = s.expeditions.filter((e) => e !== exp);
     }
@@ -77,8 +88,9 @@ function maybeEmergency(s: ShelterState, exp: Expedition): void {
   const away = s.survivors.filter((v) => v.expeditionId === exp.id && v.status === 'away');
   if (!away.length || !chance(s, Math.min(0.5, loc.danger * 0.1 * RISK_RULES[exp.risk].danger))) return;
   const trapped = pick(s, away);
-  exp.emergency = { survivorId: trapped.id, state: 'pending' };
-  log(s, `🚨 ${trapped.name} ficou encurralado(a) em ${loc.name}! Dá para assumir o controle até as 6h.`, 'bad');
+  const deadline = exp.returnHour + EMERGENCY_GRACE;
+  exp.emergency = { survivorId: trapped.id, state: 'pending', deadline };
+  log(s, `🚨 ${trapped.name} ficou encurralado(a) em ${loc.name}! Aguenta por cerca de ${Math.round((deadline - s.hour) / 2)} horas reais.`, 'bad');
 }
 
 /** Emergências que ainda esperam uma decisão do jogador. */
@@ -110,11 +122,11 @@ export function takeOverEmergency(s: ShelterState, expId: number): { survivor: S
   return { survivor: v, locationId: exp.locationId };
 }
 
-function resolveExpedition(s: ShelterState, exp: Expedition): void {
+function resolveExpedition(s: ShelterState, exp: Expedition, skipId?: string): void {
   const loc = locationById(exp.locationId);
   const rule = RISK_RULES[exp.risk];
   const stock = s.locationStock[loc.id] ?? 100;
-  for (const v of s.survivors.filter((x) => x.expeditionId === exp.id)) {
+  for (const v of s.survivors.filter((x) => x.expeditionId === exp.id && x.id !== skipId)) {
     v.expeditionId = null;
     if (v.status !== 'away') continue;
     v.status = 'home';

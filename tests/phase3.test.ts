@@ -14,7 +14,7 @@ function trappedExpedition(seed: number): ShelterState {
   expect(sendExpedition(s, 'garage', ['iuri'], 'greedy')).toBeNull();
   const exp = s.expeditions[0];
   while (s.hour < exp.departHour + 1) tickHour(s);
-  exp.emergency = { survivorId: 'iuri', state: 'pending' };
+  exp.emergency = { survivorId: 'iuri', state: 'pending', deadline: exp.returnHour + 24 };
   return s;
 }
 

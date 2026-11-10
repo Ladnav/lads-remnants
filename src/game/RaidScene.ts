@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { ZombieKind } from '../data/zombies';
 import { idx } from '../sim/raid/grid';
 import { computeVisible, exitStatus } from '../sim/raid/raid';
 import type { RaidState, Tile, Vec } from '../sim/raid/types';
@@ -11,6 +12,12 @@ const CONTAINER_COLOR: Record<string, number> = {
   Balcão: 0x8a5a3a,
   'Caixa de ferramentas': 0x9a3a2a,
   Armário: 0x5a6a7a,
+};
+
+const ZOMBIE_LOOK: Record<ZombieKind, { body: number; skin: number; scale: number }> = {
+  walker: { body: 0x4a4a3a, skin: 0x7f9a5c, scale: 1 },
+  runner: { body: 0x7a2f2a, skin: 0xa9b86a, scale: 0.85 },
+  brute: { body: 0x2f3440, skin: 0x5f7a4a, scale: 1.35 },
 };
 
 /** Desenha o estado da incursão em 3/4. Não guarda regras: só lê o estado e repassa cliques. */
@@ -157,7 +164,9 @@ export class RaidScene extends Phaser.Scene {
     for (const z of s.zombies) {
       let c = this.zombies.get(z.id);
       if (!c) {
-        c = figure(this, { body: 0x4a4a3a, skin: 0x7f9a5c, zombie: true });
+        const look = ZOMBIE_LOOK[z.kind];
+        c = figure(this, { body: look.body, skin: look.skin, zombie: true });
+        (c.getAt(0) as Phaser.GameObjects.Graphics).setScale(look.scale);
         const alert = this.add.text(0, -40, '!', { fontFamily: 'monospace', fontSize: '14px', color: '#e0573a', fontStyle: 'bold' }).setOrigin(0.5);
         c.add(alert);
         this.alerts.set(z.id, alert);

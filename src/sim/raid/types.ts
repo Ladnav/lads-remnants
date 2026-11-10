@@ -1,5 +1,6 @@
 import type { ItemId } from '../../data/items';
 import type { TraitId } from '../../data/survivors';
+import type { ZombieKind } from '../../data/zombies';
 
 export interface Vec {
   x: number;
@@ -30,6 +31,7 @@ export type ZombieState = 'idle' | 'investigating' | 'chasing';
 
 export interface Zombie {
   id: number;
+  kind: ZombieKind;
   pos: Vec;
   hp: number;
   state: ZombieState;
@@ -65,6 +67,10 @@ export interface RaidState {
   /** Nome do local, para a interface. */
   site: string;
   emergency: boolean;
+  /** Pedras para arremessar e distrair zumbis. */
+  rocks: number;
+  /** Chance de um zumbi novo ser corredor ou brutamontes. */
+  specials: number;
   rng: number;
   turn: number;
   width: number;
@@ -98,6 +104,7 @@ export type Action =
   | { type: 'use'; index: number }
   | { type: 'pick'; x: number; y: number }
   | { type: 'force'; x: number; y: number }
+  | { type: 'throw'; x: number; y: number }
   | { type: 'extract' };
 
 export type EventTone = 'info' | 'good' | 'warn' | 'bad';

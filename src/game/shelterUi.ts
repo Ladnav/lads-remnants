@@ -24,6 +24,9 @@ type Cmd =
   | { cmd: 'send' }
   | { cmd: 'cancelExp'; id: number }
   | { cmd: 'ration'; on: boolean }
+  | { cmd: 'standing'; on: boolean }
+  | { cmd: 'queue'; recipe: RecipeId }
+  | { cmd: 'unqueue'; index: number }
   | { cmd: 'skip'; hours: number }
   | { cmd: 'link' };
 
@@ -32,7 +35,7 @@ export interface ShelterUiHooks {
   /** Manda um comando ao backend; devolve o aviso de regra, se houver. */
   command: (cmd: ShelterCommand) => Promise<string | null>;
   setView: (v: View) => void;
-  startRaid: (survivorId: string, locationId: string) => void;
+  startRaid: (survivorId: string, locationId: string, loadout: { weapon: boolean; bandages: number }) => void;
   takeOver: (expId: number) => void;
   skip: (hours: number) => void;
   account: () => Account;
@@ -54,6 +57,7 @@ export class ShelterUi {
   selected = 'market';
   private exp = { ids: new Set<string>(), risk: 'balanced' as RiskRule };
   private raidWho: string | null = null;
+  private loadout = { weapon: false, bandages: 0 };
   private error = '';
   private notice = '';
 
@@ -72,6 +76,8 @@ export class ShelterUi {
       if (el.dataset.task) this.run({ cmd: 'task', id: el.dataset.task, task: el.value as TaskId });
       else if (el.name === 'exp-risk') this.exp.risk = el.value as RiskRule;
       else if (el.name === 'raid-who') this.raidWho = el.value;
+      else if (el.name === 'raid-weapon') this.loadout.weapon = (el as HTMLInputElement).checked;
+      else if (el.name === 'raid-bandages') this.loadout.bandages = Number(el.value);
       else if (el.name === 'exp-who') {
         const box = el as HTMLInputElement;
         if (box.checked) this.exp.ids.add(box.value);
@@ -125,7 +131,11 @@ export class ShelterUi {
           this.hooks.changed();
           return;
         }
-        this.hooks.startRaid(who.id, this.selected);
+        this.hooks.startRaid(who.id, this.selected, {
+          weapon: this.loadout.weapon && s.resources.weapons >= 1,
+          bandages: Math.min(this.loadout.bandages, Math.floor(s.resources.bandages)),
+        });
+        this.loadout = { weapon: false, bandages: 0 };
         return;
       }
       case 'takeOver': this.hooks.takeOver(c.expId); return;
@@ -133,7 +143,7 @@ export class ShelterUi {
       case 'link': {
         const input = this.hud.querySelector<HTMLInputElement>('input[name=email]');
         const email = input?.value.trim() ?? '';
-        if (!/^[^@s]+@[^@s]+.[^@s]+$/.test(email)) {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
           this.notice = 'Digite um e-mail válido.';
           this.hooks.changed();
           return;
@@ -153,11 +163,15 @@ export class ShelterUi {
       case 'send': return send({ type: 'send', locationId: this.selected, ids: [...this.exp.ids], risk: this.exp.risk });
       case 'cancelExp': return send({ type: 'cancelExp', id: c.id });
       case 'ration': return send({ type: 'ration', on: c.on });
+      case 'standing':
+        return send({ type: 'standing', order: c.on ? { locationId: this.selected, ids: [...this.exp.ids], risk: this.exp.risk } : null });
+      case 'queue': return send({ type: 'queue', recipe: c.recipe });
+      case 'unqueue': return send({ type: 'unqueue', index: c.index });
     }
   }
 
   private availableForRaid(s: ShelterState): ShelterSurvivor[] {
-    return s.survivors.filter((v) => v.status === 'home' && v.expeditionId === null);
+    return s.survivors.filter((v) => v.status === 'home' && v.expeditionId === null && v.raidDay !== dayOf(s.hour));
   }
 
   render(): void {
@@ -196,7 +210,7 @@ export class ShelterUi {
         const v = s.survivors.find((x) => x.id === e.emergency!.survivorId)!;
         const loc = locationById(e.locationId);
         return `<div class="card alert">
-          <h3>🚨 Emergência · decida até ${clock(e.returnHour)}</h3>
+          <h3>🚨 Emergência · decida até ${clock(e.emergency!.deadline)}</h3>
           <div class="name" style="font-size:15px">${v.name} está encurralado(a) em ${loc.name}</div>
           <p class="small">Se ninguém fizer nada, ${v.name} tenta sair sozinho(a), com o dobro do risco. Você pode assumir o controle e jogar a fuga, ou confiar na sorte.</p>
           <div class="actions">${cmdBtn('Assumir o controle', { cmd: 'takeOver', expId: e.id }, 'primary')}${cmdBtn('Deixar com ele(a)', { cmd: 'delegate', expId: e.id })}</div>
@@ -255,16 +269,24 @@ export class ShelterUi {
             <div class="small muted">${fmt(s.project.progress)}/${def.hours}h de trabalho · ${builders ? `${builders} construindo` : '<span class="warn">ninguém na tarefa Construir</span>'}${def.needsWorkbench && !s.buildings.workbench ? ' · <span class="bad">precisa de bancada</span>' : ''}</div>`;
         })()
       : '<div class="small muted">Nenhum projeto. Escolha algo abaixo.</div>';
+    const queue = s.buildQueue.length
+      ? `<div class="small muted" style="margin-top:6px">Na fila (começa sozinho quando houver material):</div>${s.buildQueue
+          .map((r, i) => `<div class="row small"><span>${i + 1}. ${RECIPES[r].icon} ${RECIPES[r].name}</span>${cmdBtn('Tirar', { cmd: 'unqueue', index: i })}</div>`)
+          .join('')}`
+      : '';
 
     const recipes = (Object.keys(RECIPES) as RecipeId[])
       .map((id) => {
         const def = RECIPES[id];
         const count = id === 'weapon' ? s.resources.weapons : s.buildings[id];
         const maxed = id !== 'weapon' && count >= def.max;
-        const blocked = maxed || !!s.project || (def.needsWorkbench && !s.buildings.workbench) || !canAfford(s, def.cost);
+        const startNow = !s.project && (!def.needsWorkbench || s.buildings.workbench > 0) && canAfford(s, def.cost);
+        const action = startNow
+          ? `<button data-cmd='${JSON.stringify({ cmd: 'build', recipe: id })}'>Construir</button>`
+          : `<button data-cmd='${JSON.stringify({ cmd: 'queue', recipe: id })}' ${s.buildQueue.length >= 6 ? 'disabled' : ''} title="Começa sozinho quando houver material e a bancada estiver livre">Pôr na fila</button>`;
         return `<div class="recipe" title="${def.description}">
           <div class="row"><span>${def.icon} ${def.name} <span class="muted">${id === 'weapon' ? '' : `${count}/${def.max}`}</span></span>
-          ${maxed ? '<span class="muted small">máx.</span>' : `<button data-cmd='${JSON.stringify({ cmd: 'build', recipe: id })}' ${blocked ? 'disabled' : ''}>Construir</button>`}</div>
+          ${maxed ? '<span class="muted small">máx.</span>' : action}</div>
           <div class="small muted">${describeCost(def.cost)} · ${def.hours}h${def.needsWorkbench ? '' : ' · sem bancada'}</div>
         </div>`;
       })
@@ -279,7 +301,7 @@ export class ShelterUi {
         ${this.expeditionList(s) || '<div class="small muted">Nenhuma planejada.</div>'}
         <div class="actions" style="margin-top:6px">${cmdBtn('🗺️ Planejar no mapa', { cmd: 'view', view: 'map' })}</div>
       </div>
-      <div class="card"><h3>Bancada</h3>${project}<div class="recipes">${recipes}</div></div>
+      <div class="card"><h3>Bancada</h3>${project}${queue}<div class="recipes">${recipes}</div></div>
       ${this.accountCard()}`;
   }
 
@@ -311,7 +333,19 @@ export class ShelterUi {
     const stock = Math.round(s.locationStock[loc.id] ?? 100);
     const lootPreview = [...new Set(loc.loot)].map((it) => `${ITEMS[it].icon} ${ITEMS[it].name}`).join(', ');
     const free = s.survivors.filter((v) => v.status === 'home' && v.expeditionId === null);
-    const raidOptions = free
+    const today = dayOf(s.hour);
+    const canRaid = free.filter((v) => v.raidDay !== today);
+    const st = s.standing;
+    const standing = st
+      ? `<div class="row small"><span>🔁 Toda noite: ${st.ids.map((id) => s.survivors.find((v) => v.id === id)?.name ?? '?').join(' e ')} → ${locationById(st.locationId).name} <span class="muted">(${RISK_RULES[st.risk].name.toLowerCase()})</span></span>${cmdBtn('Cancelar ordem', { cmd: 'standing', on: false })}</div>`
+      : '';
+    const weapons = Math.floor(s.resources.weapons);
+    const bandages = Math.min(2, Math.floor(s.resources.bandages));
+    const gear = `<div class="who">
+        <label title="Dobra o dano e arromba portas. Perdida se o sobrevivente não voltar."><input type="checkbox" name="raid-weapon" ${this.loadout.weapon && weapons ? 'checked' : ''} ${weapons ? '' : 'disabled'}/> Levar arma (${weapons} no abrigo)</label>
+        <label>Bandagens <select name="raid-bandages" ${bandages ? '' : 'disabled'}>${[0, 1, 2].filter((n) => n <= bandages).map((n) => `<option value="${n}" ${n === Math.min(this.loadout.bandages, bandages) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      </div>`;
+    const raidOptions = canRaid
       .map((v) => `<option value="${v.id}" ${v.id === this.raidWho ? 'selected' : ''}>${v.name} · saúde ${Math.round(v.health)}${v.sick ? ' · doente' : ''}</option>`)
       .join('');
 
@@ -326,12 +360,13 @@ export class ShelterUi {
         <div class="small muted" style="margin-bottom:6px">Sai às 21h, volta às 6h. Pode dar errado no meio da noite.</div>
         <div class="who">${free.length ? free.map((v) => `<label><input type="checkbox" name="exp-who" value="${v.id}" ${this.exp.ids.has(v.id) ? 'checked' : ''}/> ${v.name}</label>`).join('') : '<span class="small muted">Ninguém disponível.</span>'}</div>
         <select name="exp-risk">${(Object.keys(RISK_RULES) as RiskRule[]).map((r) => `<option value="${r}" ${r === this.exp.risk ? 'selected' : ''}>Regra ${RISK_RULES[r].name.toLowerCase()}: ${RISK_RULES[r].description}</option>`).join('')}</select>
-        <div class="actions" style="margin-top:6px">${cmdBtn('Enviar esta noite', { cmd: 'send' }, 'primary')}</div>
+        <div class="actions" style="margin-top:6px">${cmdBtn('Enviar esta noite', { cmd: 'send' }, 'primary')}${cmdBtn('🔁 Repetir toda noite', { cmd: 'standing', on: true })}</div>
+        ${standing}
         ${this.expeditionList(s)}
       </div>
       <div class="card"><h3>Incursão ativa (você joga)</h3>
-        <div class="small muted" style="margin-bottom:6px">Mais controle e mais loot. ${hasUndiscovered(s) ? 'Pode ter um 🗺️ mapa rabiscado escondido.' : ''} Quem morrer lá dentro não volta.</div>
-        ${free.length ? `<select name="raid-who">${raidOptions}</select><div class="actions" style="margin-top:6px">${cmdBtn(`Entrar em ${loc.name}`, { cmd: 'raid' }, 'primary')}</div>` : '<span class="small muted">Ninguém disponível.</span>'}
+        <div class="small muted" style="margin-bottom:6px">Uma por dia por pessoa. O loot depende do estoque do local. ${hasUndiscovered(s) && !s.mapsFound.includes(loc.id) ? 'Há um 🗺️ mapa rabiscado escondido aqui.' : ''} Quem morrer lá dentro não volta.</div>
+        ${canRaid.length ? `<select name="raid-who">${raidOptions}</select>${gear}<div class="actions" style="margin-top:6px">${cmdBtn(`Entrar em ${loc.name}`, { cmd: 'raid' }, 'primary')}</div>` : `<span class="small muted">${free.length ? 'Todos que estão em casa já saíram hoje.' : 'Ninguém disponível.'}</span>`}
       </div>`;
   }
 
@@ -357,7 +392,7 @@ export class ShelterUi {
         ${eff === 0 ? '<span class="bad">não trabalha</span>' : eff < 1 ? '<span class="warn">rende pouco</span>' : ''}
         <span class="actions">
           <button data-cmd='${JSON.stringify({ cmd: 'talk', id: v.id })}' ${talked ? 'disabled title="Já conversaram hoje"' : ''}>Conversar</button>
-          <button data-cmd='${JSON.stringify({ cmd: 'planRaid', id: v.id })}' ${booked ? 'disabled title="Escalado(a) para expedição"' : ''} title="Escolher um local no mapa para uma incursão ativa">Incursão</button>
+          <button data-cmd='${JSON.stringify({ cmd: 'planRaid', id: v.id })}' ${booked ? 'disabled title="Escalado(a) para expedição"' : v.raidDay === dayOf(s.hour) ? 'disabled title="Já saiu hoje"' : ''} title="Escolher um local no mapa para uma incursão ativa">Incursão</button>
         </span></div>`
       }
     </div>`;

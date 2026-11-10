@@ -1,5 +1,5 @@
 import { ITEMS, type ItemId } from '../../data/items';
-import { ITEM_TO_RESOURCES, LOCATIONS, RECIPES, RESOURCES, locationById, type RecipeId, type ResourceId, type TaskId } from '../../data/shelter';
+import { ITEM_TO_RESOURCES, LOCATIONS, RECIPES, RESOURCES, RISK_RULES, locationById, type RecipeId, type ResourceId, type TaskId } from '../../data/shelter';
 import { SURVIVORS } from '../../data/survivors';
 import { chance, pick, randInt } from '../rng';
 import {
@@ -17,13 +17,20 @@ import {
   isNight,
   log,
 } from './core';
-import { summarize, processExpeditions } from './expeditions';
+import { processExpeditions, sendExpedition, summarize } from './expeditions';
 import { expireDilemmas, maybeSpawnVisitor } from './visitors';
-import type { ShelterState, ShelterSurvivor } from './types';
+import type { ShelterState, ShelterSurvivor, StandingOrder } from './types';
 
 export const START_HOUR = 8;
 /** Ficar fora mais de uma semana não simula além disso. */
 export const MAX_CATCHUP_HOURS = 24 * 7;
+/** Horas de jogo sem visita (24h reais) até o abrigo entrar em modo de espera. */
+export const DORMANT_AFTER = 48;
+
+/** Modo de espera: o grupo come e bebe metade, e ninguém bate na porta. */
+export function isDormant(s: ShelterState): boolean {
+  return s.hour - s.lastSeenHour >= DORMANT_AFTER;
+}
 
 const STARTING_TASKS: Record<string, TaskId> = { marta: 'craft', iuri: 'guard', lena: 'clean' };
 
@@ -57,6 +64,7 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
       expeditionId: null,
       talkedDay: 0,
       brokenHours: 0,
+      raidDay: 0,
     })),
     expeditions: [],
     dilemmas: [],
@@ -73,6 +81,9 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
     seenResources: null,
     seenAlive: [],
     activeRaid: null,
+    mapsFound: [],
+    standing: null,
+    buildQueue: [],
   };
   log(s, 'Dia 1. Uma casa de dois andares com muro alto. Três pessoas, pouca água, nenhum plano.');
   log(s, 'Comece pela bancada: sem ela, quase nada se constrói.');
@@ -85,7 +96,14 @@ export function migrate(s: ShelterState): ShelterState {
   s.seenResources ??= null;
   s.seenAlive ??= [];
   s.activeRaid ??= null;
-  for (const e of s.expeditions) e.emergency ??= null;
+  s.mapsFound ??= [];
+  s.standing ??= null;
+  s.buildQueue ??= [];
+  for (const v of s.survivors) v.raidDay ??= 0;
+  for (const e of s.expeditions) {
+    e.emergency ??= null;
+    if (e.emergency) e.emergency.deadline ??= e.returnHour;
+  }
   return s;
 }
 
@@ -135,7 +153,12 @@ export function tickHour(s: ShelterState): void {
 
   if (h === 0) newDay(s);
   if (h === 6) waterGarden(s);
+  if (s.hour - s.lastSeenHour === DORMANT_AFTER) {
+    log(s, 'Faz um dia que ninguém decide nada. O grupo aperta o cinto e espera: meia porção para todos.', 'warn');
+  }
+  if (h === 20) runStandingOrder(s);
   processExpeditions(s);
+  startQueuedProject(s);
 
   const home = homeSurvivors(s);
   passiveProduction(s, home.length, h);
@@ -187,8 +210,10 @@ function passiveProduction(s: ShelterState, people: number, h: number): void {
 }
 
 function updateNeeds(s: ShelterState, v: ShelterSurvivor, night: boolean, hasBed: boolean): void {
-  v.hunger = clamp(v.hunger + 2.4);
-  v.thirst = clamp(v.thirst + 2.2);
+  // Em modo de espera o grupo se poupa: fome e sede crescem mais devagar.
+  const pace = isDormant(s) ? 0.6 : 1;
+  v.hunger = clamp(v.hunger + 2.4 * pace);
+  v.thirst = clamp(v.thirst + 2.2 * pace);
   const sleeping = night && v.task !== 'guard';
   if (sleeping) v.fatigue = clamp(v.fatigue - (hasBed ? 10 : 6));
   else if (!night && v.task === 'rest') v.fatigue = clamp(v.fatigue - 3);
@@ -267,7 +292,7 @@ function work(s: ShelterState, v: ShelterSurvivor): void {
 }
 
 function drink(s: ShelterState): void {
-  const amount = s.rationing ? 0.5 : 1;
+  const amount = (s.rationing ? 0.5 : 1) * (isDormant(s) ? 0.5 : 1);
   const relief = s.rationing ? 30 : 50;
   const thirsty: string[] = [];
   for (const v of homeSurvivors(s)) {
@@ -289,7 +314,7 @@ function drink(s: ShelterState): void {
 }
 
 function eat(s: ShelterState): void {
-  const cost = (s.buildings.stove ? 0.6 : 1) * (s.rationing ? 0.5 : 1);
+  const cost = (s.buildings.stove ? 0.6 : 1) * (s.rationing ? 0.5 : 1) * (isDormant(s) ? 0.5 : 1);
   const relief = s.rationing ? 40 : 70;
   const hungry: ShelterSurvivor[] = [];
   for (const v of homeSurvivors(s)) {
@@ -433,7 +458,11 @@ export interface RaidOutcome {
   kills: number;
 }
 
-export function applyRaidResult(s: ShelterState, id: string, r: RaidOutcome, locationId = 'market'): void {
+/**
+ * Aplica o resultado de uma incursão ativa. `carried` é o equipamento que saiu do
+ * abrigo: volta para o estoque, mas não conta como achado.
+ */
+export function applyRaidResult(s: ShelterState, id: string, r: RaidOutcome, locationId = 'market', carried: readonly ItemId[] = []): void {
   const v = s.survivors.find((x) => x.id === id);
   if (!v || v.status !== 'home') return;
   const loc = locationById(locationId);
@@ -443,17 +472,83 @@ export function applyRaidResult(s: ShelterState, id: string, r: RaidOutcome, loc
   }
   const loot = r.items.filter((it) => it !== 'map_note');
   for (const it of loot) addResources(s, ITEM_TO_RESOURCES[it]);
-  s.locationStock[loc.id] = Math.max(10, (s.locationStock[loc.id] ?? 100) - loot.length * 3);
+  const found: ItemId[] = [...loot];
+  for (const it of carried) {
+    const k = found.indexOf(it);
+    if (k >= 0) found.splice(k, 1);
+  }
+  s.locationStock[loc.id] = Math.max(10, (s.locationStock[loc.id] ?? 100) - found.length * 3);
   v.health = clamp(v.health - r.hpLost * 25);
   v.fatigue = clamp(v.fatigue + 20);
-  const value = loot.reduce((sum, it) => sum + ITEMS[it].value, 0);
+  const value = found.reduce((sum, it) => sum + ITEMS[it].value, 0);
   if (value >= 10) changeMood(s, 4);
   log(
     s,
-    loot.length
-      ? `${v.name} voltou de ${loc.name} com ${summarize(loot)}.${r.hpLost ? ' Ferido(a).' : ''}`
+    found.length
+      ? `${v.name} voltou de ${loc.name} com ${summarize(found)}.${r.hpLost ? ' Ferido(a).' : ''}`
       : `${v.name} voltou de ${loc.name} sem nada.`,
-    loot.length ? 'good' : 'warn',
+    found.length ? 'good' : 'warn',
   );
-  if (r.items.includes('map_note')) revealLocation(s);
+  if (r.items.includes('map_note') && !s.mapsFound.includes(loc.id)) {
+    s.mapsFound.push(loc.id);
+    revealLocation(s);
+  }
+}
+
+// ---------- Ordens permanentes ----------
+
+export function setStanding(s: ShelterState, order: StandingOrder | null): string | null {
+  if (!order) {
+    if (s.standing) log(s, 'Ordem permanente cancelada.');
+    s.standing = null;
+    return null;
+  }
+  if (!s.discovered.includes(order.locationId)) return 'Ninguém sabe o caminho até esse lugar ainda.';
+  const ids = [...new Set(order.ids)].filter((id) => aliveSurvivors(s).some((v) => v.id === id));
+  if (ids.length < 1 || ids.length > 2) return 'Escolha 1 ou 2 sobreviventes.';
+  if (!(order.risk in RISK_RULES)) return 'Regra de risco desconhecida.';
+  s.standing = { locationId: order.locationId, ids, risk: order.risk };
+  const names = ids.map((id) => s.survivors.find((v) => v.id === id)!.name).join(' e ');
+  log(s, `Ordem permanente: ${names} ${ids.length > 1 ? 'vão' : 'vai'} para ${locationById(order.locationId).name} toda noite.`);
+  return null;
+}
+
+function runStandingOrder(s: ShelterState): void {
+  const o = s.standing;
+  if (!o) return;
+  const alive = o.ids.filter((id) => aliveSurvivors(s).some((v) => v.id === id));
+  if (!alive.length) {
+    s.standing = null;
+    log(s, 'A ordem permanente acabou: não sobrou ninguém para cumpri-la.', 'warn');
+    return;
+  }
+  const fit = alive.filter((id) => {
+    const v = s.survivors.find((x) => x.id === id)!;
+    return v.status === 'home' && v.expeditionId === null && v.health > 50 && !v.sick && emotionOf(v.mood) !== 'quebrado';
+  });
+  if (!fit.length) {
+    log(s, `Ordem permanente: ninguém em condições de ir para ${locationById(o.locationId).name} esta noite.`, 'warn');
+    return;
+  }
+  sendExpedition(s, o.locationId, fit, o.risk);
+}
+
+export const MAX_BUILD_QUEUE = 6;
+
+export function queueProject(s: ShelterState, recipe: RecipeId): string | null {
+  if (!(recipe in RECIPES)) return 'Receita desconhecida.';
+  if (s.buildQueue.length >= MAX_BUILD_QUEUE) return 'A fila está cheia.';
+  s.buildQueue.push(recipe);
+  return null;
+}
+
+export function unqueueProject(s: ShelterState, index: number): void {
+  if (Number.isInteger(index) && index >= 0 && index < s.buildQueue.length) s.buildQueue.splice(index, 1);
+}
+
+function startQueuedProject(s: ShelterState): void {
+  if (s.project || !s.buildQueue.length) return;
+  const error = startProject(s, s.buildQueue[0]);
+  // Começou, ou nunca vai poder (limite atingido): sai da fila. Senão, espera material.
+  if (error === null || error === 'Limite atingido.') s.buildQueue.shift();
 }

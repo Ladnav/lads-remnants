@@ -3,7 +3,7 @@
 import { RECIPES, type RecipeId } from '../src/data/shelter';
 import { aliveSurvivors, dayOf, emotionOf, homeSurvivors, hourOfDay } from '../src/sim/shelter/core';
 import { sendExpedition } from '../src/sim/shelter/expeditions';
-import { createShelter, isGameOver, setTask, startProject, tickHour } from '../src/sim/shelter/shelter';
+import { createShelter, isGameOver, queueProject, setStanding, setTask, startProject, tickHour } from '../src/sim/shelter/shelter';
 import type { ShelterState } from '../src/sim/shelter/types';
 import { resolveDilemma } from '../src/sim/shelter/visitors';
 
@@ -12,12 +12,22 @@ type Policy = (s: ShelterState) => void;
 /** Ninguém entra no jogo: tudo no automático. */
 const afk: Policy = () => {};
 
+/** Uma única visita no dia 1: deixa ordens permanentes e some. */
+const afkOrders: Policy = (s) => {
+  if (s.hour !== 8) return;
+  setStanding(s, { locationId: 'market', ids: ['iuri'], risk: 'balanced' });
+  startProject(s, 'workbench');
+  for (const r of ['rainCollector', 'garden', 'latrine'] as const) queueProject(s, r);
+  setTask(s, 'lena', 'garden');
+};
+
 const BUILD_ORDER: RecipeId[] = ['workbench', 'rainCollector', 'garden', 'latrine', 'filter', 'stove', 'bed', 'barricade', 'garden', 'bed'];
 
 /** Jogador casual: entra às 12h e às 20h, constrói, manda uma expedição, resolve visitantes com bom senso. */
 const casual: Policy = (s) => {
   const h = hourOfDay(s.hour);
   if (h !== 12 && h !== 20) return;
+  s.lastSeenHour = s.hour;
   for (const d of [...s.dilemmas]) {
     const opt = d.kind === 'bandits' ? 'pay' : d.kind === 'trader' ? 'accept' : d.kind === 'refugee' ? 'accept' : 'refuse';
     resolveDilemma(s, d.id, opt);
@@ -71,7 +81,7 @@ function run(policy: Policy, seed: number, maxDays: number) {
 
 const SEEDS = 40;
 const MAX_DAYS = 30;
-for (const [name, policy] of [['AFK (ninguém joga)', afk], ['Casual (2 visitas/dia)', casual]] as const) {
+for (const [name, policy] of [['AFK (ninguém joga)', afk], ['AFK com ordens permanentes (1 visita)', afkOrders], ['Casual (2 visitas/dia)', casual]] as const) {
   const results = Array.from({ length: SEEDS }, (_, i) => run(policy, i + 1, MAX_DAYS));
   const days = results.map((r) => r.days).sort((a, b) => a - b);
   const survived = results.filter((r) => r.alive > 0).length;

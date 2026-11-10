@@ -27,6 +27,15 @@ export interface ShelterSurvivor {
   expeditionId: number | null;
   talkedDay: number;
   brokenHours: number;
+  /** Dia da última incursão ativa: só uma por dia por pessoa. */
+  raidDay: number;
+}
+
+/** Ordem permanente: repetir esta expedição toda noite, enquanto houver gente em condições. */
+export interface StandingOrder {
+  locationId: string;
+  ids: string[];
+  risk: RiskRule;
 }
 
 export interface Expedition {
@@ -45,6 +54,10 @@ export interface Emergency {
   survivorId: string;
   /** pending: esperando o jogador · ai: o jogador deixou a IA resolver · played: o jogador jogou a incursão. */
   state: 'pending' | 'ai' | 'played';
+  /** Até quando o jogador pode decidir; passa da hora de volta do resto do grupo. */
+  deadline: number;
+  /** O resto do grupo já voltou; só o encurralado continua fora. */
+  held?: boolean;
 }
 
 export type VisitorKind = 'beggar' | 'refugee' | 'trader' | 'conman' | 'bandits';
@@ -107,6 +120,11 @@ export interface ShelterState {
   seenAlive: string[];
   /** Incursão ativa em andamento: a semente vem do servidor e o resultado é conferido no fim. */
   activeRaid: RaidTicket | null;
+  /** Locais cujo mapa rabiscado já foi achado (um por local). */
+  mapsFound: string[];
+  standing: StandingOrder | null;
+  /** Próximas construções: começam sozinhas quando houver material. */
+  buildQueue: RecipeId[];
 }
 
 export interface RaidTicket {

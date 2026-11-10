@@ -1,5 +1,6 @@
 import { ITEMS, type ItemId } from '../../data/items';
 import type { SurvivorDef, TraitId } from '../../data/survivors';
+import { ZOMBIES } from '../../data/zombies';
 import { chance, nextRandom, pick, type RngState } from '../rng';
 import {
   DIRS,
@@ -12,7 +13,7 @@ import {
   manhattan,
   tileAt,
 } from './grid';
-import { generateSite, type SiteOptions } from './mapgen';
+import { generateSite, rollZombieKind, type SiteOptions } from './mapgen';
 import type { Action, Container, EventTone, Noise, RaidEvent, RaidState, Vec, Zombie } from './types';
 
 export const VIEW_RADIUS = 7;
@@ -30,13 +31,19 @@ const NOISE = {
   force: 8,
   forceCrowbar: 5,
   bash: 3,
+  rock: 5,
 } as const;
+
+export const START_ROCKS = 2;
+export const THROW_RANGE = 6;
 
 export interface RaidOptions extends SiteOptions {
   site?: string;
   startHp?: number;
   /** Expedição em apuros: a horda já está acordada e vindo. */
   emergency?: boolean;
+  /** Equipamento trazido do abrigo: já começa na mochila. */
+  startItems?: ItemId[];
 }
 
 export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {}): RaidState {
@@ -47,6 +54,8 @@ export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {
     seed,
     site: opts.site ?? 'Mercado Bom Preço',
     emergency: !!opts.emergency,
+    rocks: START_ROCKS,
+    specials: opts.specials ?? 0,
     rng: r.rng,
     turn: 0,
     width: map.width,
@@ -55,7 +64,7 @@ export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {
     seen: new Array(map.width * map.height).fill(false),
     player: map.start,
     survivor: { id: def.id, name: def.name, traits: [...def.traits], hp: Math.min(startHp, def.maxHp), maxHp: def.maxHp },
-    backpack: [],
+    backpack: [...(opts.startItems ?? [])],
     containers: map.containers,
     zombies: map.zombies,
     exits: map.exits,
@@ -255,6 +264,13 @@ export function applyAction(state: RaidState, action: Action): RaidEvent[] {
       endTurn(state, ev, [{ pos: { ...action }, radius: crowbar ? NOISE.forceCrowbar : NOISE.force }]);
       break;
     }
+    case 'throw': {
+      if (!canThrowAt(state, action)) break;
+      state.rocks--;
+      say('A pedra quica lá longe. Cabeças se viram para o barulho.', 'info');
+      endTurn(state, ev, [{ pos: { x: action.x, y: action.y }, radius: NOISE.rock }]);
+      break;
+    }
     case 'extract': {
       const e = exitAt(state, state.player);
       if (!e) break;
@@ -305,6 +321,15 @@ function doMove(
   endTurn(state, ev, [{ pos: { ...state.player }, radius }]);
 }
 
+/** Dá para arremessar uma pedra ali? Precisa ver o lugar e ele estar a uma distância razoável. */
+export function canThrowAt(state: RaidState, p: Vec): boolean {
+  if (state.rocks <= 0 || !Number.isInteger(p.x) || !Number.isInteger(p.y)) return false;
+  const t = tileAt(state, p.x, p.y);
+  if (!t || t.kind === 'wall') return false;
+  const d = manhattan(state.player, p);
+  return d >= 2 && d <= THROW_RANGE && lineOfSight(state, state.player, p);
+}
+
 function attackZombie(state: RaidState, z: Zombie, say: (t: string, tone?: EventTone) => void): void {
   const hitChance = hasTrait(state, 'lutador') ? 0.9 : 0.7;
   z.state = 'chasing';
@@ -317,9 +342,9 @@ function attackZombie(state: RaidState, z: Zombie, say: (t: string, tone?: Event
   if (z.hp <= 0) {
     state.zombies = state.zombies.filter((o) => o !== z);
     state.kills++;
-    say('O zumbi cai e não levanta mais.', 'good');
+    say(`O ${ZOMBIES[z.kind].name} cai e não levanta mais.`, 'good');
   } else {
-    say('Você acerta o zumbi. Ele ainda vem.', 'info');
+    say(`Você acerta o ${ZOMBIES[z.kind].name}. Ele ainda vem.`, 'info');
   }
 }
 
@@ -375,7 +400,7 @@ function actZombie(state: RaidState, z: Zombie, ev: RaidEvent[]): void {
   const d = manhattan(z.pos, state.player);
   const sees = d <= ZOMBIE_SIGHT && lineOfSight(state, z.pos, state.player);
   if (sees) {
-    if (z.state !== 'chasing') ev.push({ text: 'Um zumbi te viu!', tone: 'bad' });
+    if (z.state !== 'chasing') ev.push({ text: `Um ${ZOMBIES[z.kind].name} te viu!`, tone: 'bad' });
     z.state = 'chasing';
     z.target = { ...state.player };
   } else if (z.state === 'chasing') {
@@ -383,7 +408,7 @@ function actZombie(state: RaidState, z: Zombie, ev: RaidEvent[]): void {
   }
 
   if (z.state === 'chasing' && d === 1) {
-    biteAttempt(state, ev);
+    biteAttempt(state, z, ev);
     return;
   }
 
@@ -395,7 +420,7 @@ function actZombie(state: RaidState, z: Zombie, ev: RaidEvent[]): void {
     return;
   }
 
-  z.moveAcc += z.state === 'chasing' ? 0.75 : 0.5;
+  z.moveAcc += z.state === 'chasing' ? ZOMBIES[z.kind].speed : Math.min(0.5, ZOMBIES[z.kind].speed);
   while (z.moveAcc >= 1 && z.target) {
     z.moveAcc -= 1;
     const next = nextStep(state, z.pos, z.target);
@@ -410,9 +435,10 @@ function actZombie(state: RaidState, z: Zombie, ev: RaidEvent[]): void {
   }
 }
 
-function biteAttempt(state: RaidState, ev: RaidEvent[]): void {
-  if (nextRandom(state) >= 0.5) {
-    ev.push({ text: 'Um zumbi avança, mas você se esquiva.', tone: 'warn' });
+function biteAttempt(state: RaidState, z: Zombie, ev: RaidEvent[]): void {
+  const def = ZOMBIES[z.kind];
+  if (nextRandom(state) >= def.bite) {
+    ev.push({ text: `Um ${def.name} avança, mas você se esquiva.`, tone: 'warn' });
     return;
   }
   state.survivor.hp--;
@@ -420,7 +446,7 @@ function biteAttempt(state: RaidState, ev: RaidEvent[]): void {
     state.status = 'dead';
     ev.push({ text: `${state.survivor.name} foi pego. Tudo o que carregava ficou para trás.`, tone: 'bad' });
   } else {
-    ev.push({ text: 'Um zumbi te morde! Você está ferido.', tone: 'bad' });
+    ev.push({ text: `Um ${def.name} te morde! Você está ferido.`, tone: 'bad' });
   }
 }
 
@@ -467,10 +493,13 @@ function spawnZombie(state: RaidState, ev: RaidEvent[]): void {
   );
   if (!options.length) return;
   const pos = pick(state, options);
+  // A horda piora com o tempo: cada leva tem mais chance de trazer algo pior.
+  const kind = rollZombieKind(state, Math.min(0.6, state.specials + state.turn / 150));
   state.zombies.push({
     id: state.nextZombieId++,
+    kind,
     pos: { ...pos },
-    hp: 2,
+    hp: ZOMBIES[kind].hp,
     state: 'investigating',
     target: { ...state.player },
     moveAcc: 0,

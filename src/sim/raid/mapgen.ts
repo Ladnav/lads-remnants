@@ -1,4 +1,5 @@
 import { CONTAINERS, type ItemId } from '../../data/items';
+import { ZOMBIES, type ZombieKind } from '../../data/zombies';
 import { chance, pick, randInt, type RngState } from '../rng';
 import { DIRS, bfsDistances, idx, isWalkableForPath, type GridLike } from './grid';
 import type { Container, DoorState, Exit, Tile, Vec, Zombie } from './types';
@@ -31,6 +32,10 @@ export interface SiteOptions {
   /** Loot típico do local; metade dos itens vem daqui, metade do tipo de container. */
   loot?: readonly ItemId[];
   zombies?: [number, number];
+  /** 0–1: quanto do loot ainda existe (estoque do local). Padrão 1. */
+  lootScale?: number;
+  /** 0–1: chance de cada zumbi ser corredor ou brutamontes. Padrão 0. */
+  specials?: number;
   /** Esconde um mapa rabiscado num container (revela um novo local no abrigo). */
   mapNote?: boolean;
 }
@@ -79,7 +84,10 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
       if (neighbours.some((n) => n.kind === 'door' || n.kind === 'exit' || n.containerId !== undefined)) continue;
       const def = pick(r, CONTAINERS);
       const count = randInt(r, def.min, def.max);
-      const items = Array.from({ length: count }, () => pick(r, opts.loot && chance(r, 0.5) ? opts.loot : def.loot));
+      const scale = opts.lootScale ?? 1;
+      const items = Array.from({ length: count }, () => pick(r, opts.loot && chance(r, 0.5) ? opts.loot : def.loot)).filter(
+        () => scale >= 1 || chance(r, scale),
+      );
       const id = containers.length;
       containers.push({ id, pos: { x, y }, name: def.name, searched: false, items });
       t.containerId = id;
@@ -140,7 +148,8 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
   for (let tries = 0; tries < 50 && zombies.length < zCount; tries++) {
     const p = pick(r, zombieSpots);
     if (zombies.some((z) => z.pos.x === p.x && z.pos.y === p.y)) continue;
-    zombies.push({ id: zombies.length, pos: p, hp: 2, state: 'idle', target: null, moveAcc: 0 });
+    const kind = rollZombieKind(r, opts.specials ?? 0);
+    zombies.push({ id: zombies.length, kind, pos: p, hp: ZOMBIES[kind].hp, state: 'idle', target: null, moveAcc: 0 });
   }
 
   if (opts.mapNote) {
@@ -152,6 +161,11 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
   }
 
   return { width, height, tiles, containers, zombies, exits, spawns, start };
+}
+
+export function rollZombieKind(r: RngState, specials: number): ZombieKind {
+  if (!chance(r, specials)) return 'walker';
+  return chance(r, 0.5) ? 'runner' : 'brute';
 }
 
 function countIn(containers: Container[], room: Rect): number {

@@ -5,6 +5,7 @@ import {
   adjacentContainers,
   adjacentLockedDoors,
   applyAction,
+  canThrowAt,
   capacity,
   carriedWeight,
   computeVisible,
@@ -24,6 +25,8 @@ export class RaidUi {
   private state: RaidState | null = null;
   private log: RaidEvent[] = [];
   private onDone: (actions: Action[]) => void = () => {};
+  /** Modo de mira: o próximo clique no mapa arremessa uma pedra. */
+  private throwing = false;
 
   constructor(
     private scene: RaidScene,
@@ -33,6 +36,7 @@ export class RaidUi {
     scene.setTileClickHandler((p) => this.click(p));
     hud.addEventListener('click', (e) => {
       if (!this.state) return;
+      if ((e.target as HTMLElement).closest('button[data-ui="throw"]')) return this.toggleThrow();
       const btn = (e.target as HTMLElement).closest('button[data-action]') as HTMLButtonElement | null;
       if (!btn) return;
       this.act(JSON.parse(btn.dataset.action!) as Action);
@@ -47,6 +51,7 @@ export class RaidUi {
   /** Joga a incursão do ingresso; no fim entrega só o log de ações (o servidor confere). */
   begin(ticket: RaidTicket, onDone: (actions: Action[]) => void): void {
     this.onDone = onDone;
+    this.throwing = false;
     const def = ticket.def;
     const s = (this.state = createRaid(ticket.seed, def, ticket.opts));
     const roof = s.exits.find((e) => e.id === 'roof');
@@ -89,15 +94,30 @@ export class RaidUi {
     } else if (k === 'p' || k === 'f') {
       const door = adjacentLockedDoors(s)[0];
       if (door) this.act({ type: k === 'p' ? 'pick' : 'force', x: door.x, y: door.y });
+    } else if (k === 't') {
+      this.toggleThrow();
     } else if (k === 'b') {
       const i = s.backpack.indexOf('bandage');
       if (i >= 0) this.act({ type: 'use', index: i });
     }
   }
 
+  private toggleThrow(): void {
+    const s = this.state;
+    if (!s || s.status !== 'active') return;
+    this.throwing = !this.throwing && s.rocks > 0;
+    this.render();
+  }
+
   private click(p: Vec): void {
     const s = this.state;
     if (!s || s.status !== 'active') return;
+    if (this.throwing) {
+      this.throwing = false;
+      if (canThrowAt(s, p)) return this.act({ type: 'throw', x: p.x, y: p.y });
+      this.log.push({ text: 'Não dá para arremessar ali: longe demais, perto demais ou fora de vista.', tone: 'warn' });
+      return this.render();
+    }
     const c = s.containers.find((k) => k.pos.x === p.x && k.pos.y === p.y);
     if (c && chebyshev(c.pos, s.player) === 1 && !c.searched) return this.act({ type: 'search', containerId: c.id });
     if (manhattan(p, s.player) === 1) this.act({ type: 'move', dx: p.x - s.player.x, dy: p.y - s.player.y });
@@ -160,6 +180,9 @@ export class RaidUi {
       .join('');
 
     const actions: string[] = [btn('Esperar [Espaço]', { type: 'wait' })];
+    actions.push(
+      `<button data-ui="throw" class="${this.throwing ? 'primary' : ''}" ${s.rocks > 0 ? '' : 'disabled'} title="Faz barulho longe de você: zumbis vão investigar">${this.throwing ? 'Clique onde jogar…' : `Arremessar pedra [T] · ${s.rocks}`}</button>`,
+    );
     const here = exitAt(s, s.player);
     if (here && exitStatus(s, here.id) === 'open') actions.unshift(btn(`Extrair pela ${here.name.toLowerCase()} [X]`, { type: 'extract' }, 'primary'));
     for (const d of adjacentLockedDoors(s)) {

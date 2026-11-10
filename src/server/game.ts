@@ -1,10 +1,11 @@
 // Regras de "servidor": tudo o que muda o abrigo passa por aqui. O mesmo código roda
 // no navegador (modo offline) e na Edge Function do Supabase (modo online), então o
 // cliente nunca escreve o estado direto: só pede comandos.
+import type { ItemId } from '../data/items';
 import { locationById, type RecipeId, type RiskRule, type TaskId } from '../data/shelter';
 import { replay } from '../sim/raid/raid';
 import type { Action } from '../sim/raid/types';
-import { clamp, log } from '../sim/shelter/core';
+import { clamp, dayOf, log } from '../sim/shelter/core';
 import { cancelExpedition, delegateEmergency, sendExpedition, takeOverEmergency } from '../sim/shelter/expeditions';
 import {
   advanceTo,
@@ -15,7 +16,10 @@ import {
   isGameOver,
   markSeen,
   migrate,
+  queueProject,
   raidHp,
+  setStanding,
+  unqueueProject,
   setRationing,
   setTask,
   startProject,
@@ -23,7 +27,7 @@ import {
   tickHour,
   type RaidOutcome,
 } from '../sim/shelter/shelter';
-import type { RaidTicket, ShelterState } from '../sim/shelter/types';
+import type { RaidTicket, ShelterState, StandingOrder } from '../sim/shelter/types';
 import { resolveDilemma } from '../sim/shelter/visitors';
 
 export type ShelterCommand =
@@ -36,6 +40,9 @@ export type ShelterCommand =
   | { type: 'cancelExp'; id: number }
   | { type: 'ration'; on: boolean }
   | { type: 'delegate'; expId: number }
+  | { type: 'standing'; order: StandingOrder | null }
+  | { type: 'queue'; recipe: RecipeId }
+  | { type: 'unqueue'; index: number }
   | { type: 'seen' };
 
 export interface RaidRequest {
@@ -43,7 +50,13 @@ export interface RaidRequest {
   locationId: string;
   /** Assumir o controle de uma emergência desta expedição. */
   emergencyExpId?: number;
+  /** Equipamento tirado do estoque do abrigo. Perdido se o sobrevivente morrer ou fugir. */
+  loadout?: { weapon?: boolean; bandages?: number };
 }
+
+/** Cansaço a partir do qual ninguém aceita sair para uma incursão. */
+export const RAID_MAX_FATIGUE = 85;
+const SPECIALS_BY_DANGER = { 1: 0.1, 2: 0.25, 3: 0.4 } as const;
 
 /** Limite de ações por incursão: protege o servidor de logs gigantes. */
 export const MAX_RAID_ACTIONS = 3000;
@@ -73,6 +86,8 @@ export { isGameOver };
 export function applyCommand(s: ShelterState, cmd: ShelterCommand, nowMs: number): Result<null> {
   advanceTo(s, nowMs);
   if (isGameOver(s)) return fail('A comunidade acabou.');
+  // Qualquer comando prova que o jogador está presente (tira o abrigo do modo de espera).
+  if (cmd.type !== 'seen') s.lastSeenHour = s.hour;
   let error: string | null = null;
   switch (cmd.type) {
     case 'task': setTask(s, cmd.id, cmd.task); break;
@@ -84,6 +99,9 @@ export function applyCommand(s: ShelterState, cmd: ShelterCommand, nowMs: number
     case 'cancelExp': cancelExpedition(s, cmd.id); break;
     case 'ration': setRationing(s, cmd.on); break;
     case 'delegate': delegateEmergency(s, cmd.expId); break;
+    case 'standing': error = setStanding(s, cmd.order); break;
+    case 'queue': error = queueProject(s, cmd.recipe); break;
+    case 'unqueue': unqueueProject(s, cmd.index); break;
     case 'seen': markSeen(s); break;
     default: error = 'Comando desconhecido.';
   }
@@ -97,6 +115,7 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
   const loc = locationById(req.locationId);
 
   let emergency = false;
+  const startItems: ItemId[] = [];
   if (req.emergencyExpId !== undefined) {
     const taken = takeOverEmergency(s, req.emergencyExpId);
     if (!taken || taken.survivor.id !== req.survivorId || taken.locationId !== req.locationId) return fail('Essa emergência já passou.');
@@ -104,6 +123,18 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
   } else {
     const v = s.survivors.find((x) => x.id === req.survivorId);
     if (!v || v.status !== 'home' || v.expeditionId !== null) return fail('Essa pessoa não está disponível.');
+    if (v.raidDay === dayOf(s.hour)) return fail(`${v.name} já saiu hoje. Só amanhã.`);
+    if (v.fatigue >= RAID_MAX_FATIGUE) return fail(`${v.name} está exausto(a) demais para sair.`);
+    const bandages = Math.max(0, Math.min(2, Math.floor(req.loadout?.bandages ?? 0)));
+    if (req.loadout?.weapon && s.resources.weapons < 1) return fail('Não há arma sobrando no abrigo.');
+    if (s.resources.bandages < bandages) return fail('Não há bandagens suficientes.');
+    if (req.loadout?.weapon) {
+      s.resources.weapons -= 1;
+      startItems.push('crowbar');
+    }
+    s.resources.bandages -= bandages;
+    for (let i = 0; i < bandages; i++) startItems.push('bandage');
+    v.raidDay = dayOf(s.hour);
     v.status = 'raid';
   }
 
@@ -120,7 +151,11 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
       zombies: loc.zombies,
       startHp: raidHp(v),
       emergency,
-      mapNote: hasUndiscovered(s),
+      startItems,
+      // O que sobrou no local: saquear demais deixa o prédio vazio.
+      lootScale: ((s.locationStock[loc.id] ?? 100) / 100) * (emergency ? 0.5 : 1),
+      specials: SPECIALS_BY_DANGER[loc.danger],
+      mapNote: hasUndiscovered(s) && !s.mapsFound.includes(loc.id),
     },
   };
   s.activeRaid = ticket;
@@ -155,7 +190,7 @@ export function finishRaid(s: ShelterState, raidId: number, actions: Action[], n
   s.activeRaid = null;
   const v = s.survivors.find((x) => x.id === t.survivorId);
   if (v && v.status === 'raid') v.status = 'home';
-  applyRaidResult(s, t.survivorId, outcome, t.locationId);
+  applyRaidResult(s, t.survivorId, outcome, t.locationId, t.opts.startItems ?? []);
   advanceTo(s, nowMs);
   return ok(outcome);
 }

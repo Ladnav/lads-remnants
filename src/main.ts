@@ -51,7 +51,7 @@ const shelterUi = new ShelterUi(hud, {
     }
   },
   setView: (v) => switchTo(v),
-  startRaid: (survivorId, locationId) => void playRaid({ survivorId, locationId }),
+  startRaid: (survivorId, locationId, loadout) => void playRaid({ survivorId, locationId, loadout }),
   takeOver: (expId) => {
     const e = shelter.expeditions.find((x) => x.id === expId);
     if (e?.emergency) void playRaid({ survivorId: e.emergency.survivorId, locationId: e.locationId, emergencyExpId: expId });
@@ -184,7 +184,7 @@ async function playRaid(req: RaidRequest): Promise<void> {
     game.scene.stop(SCENE_OF[back]);
     mode = 'raid';
     shelterUi.detach();
-    hint.textContent = 'Setas/WASD mover · andar até uma porta abre · andar até um zumbi ataca · E procurar · Espaço esperar · X extrair';
+    hint.textContent = 'Setas/WASD mover · andar até uma porta abre · andar até um zumbi ataca · E procurar · T arremessar pedra · Espaço esperar · X extrair';
     raidUi.begin(ticket, (actions) => void endRaid(ticket.id, actions, back));
     game.scene.start('raid');
   } catch (e) {

@@ -10,7 +10,8 @@ const TRADE_GIVES: readonly ResourceId[] = ['meds', 'bandages', 'water', 'food',
 
 /** Durante o dia, às vezes alguém bate na porta. */
 export function maybeSpawnVisitor(s: ShelterState, h: number): void {
-  if (h < 9 || h > 18 || s.dilemmas.length > 0 || !chance(s, 0.07)) return;
+  // Em modo de espera ninguém bate na porta: dilemas sem resposta só puniriam a ausência.
+  if (h < 9 || h > 18 || s.dilemmas.length > 0 || s.hour - s.lastSeenHour >= 48 || !chance(s, 0.07)) return;
   const kinds: VisitorKind[] = ['beggar', 'trader', 'trader', 'conman', 'bandits'];
   const freeRecruits = RECRUITS.filter((r) => !s.usedRecruits.includes(r.id));
   if (freeRecruits.length && aliveSurvivors(s).length < 6) kinds.push('refugee', 'refugee');
@@ -119,6 +120,7 @@ export function resolveDilemma(s: ShelterState, dilemmaId: number, optionId: str
           expeditionId: null,
           talkedDay: 0,
           brokenHours: 0,
+          raidDay: 0,
         });
         changeMood(s, 3);
         log(s, `${r.name} agora faz parte do grupo.`, 'good');

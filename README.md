@@ -47,6 +47,14 @@ O `.env.local` (fora do git) guarda também a senha do banco e o ref do projeto 
   - `ALLOW_DEV_TOOLS=true` (secret da função) libera +1h/+6h. **Desligue antes de playtests com outras pessoas.**
   - Fica para a Fase 4b: push notifications (PWA) e o cron do tick.
 
-Balanceamento atual (`npm run balance`, 40 sementes): sem nenhuma visita, a comunidade dura cerca de 6 dias. Um jogador casual simulado (2 visitas por dia) dura cerca de 23 dias, e 25% chegam ao dia 30 (o bot não usa incursões ativas nem resolve emergências).
+- **Revisão de mecânicas**:
+  - Incursão ativa: uma por dia por sobrevivente, recusada com cansaço alto, e o loot do mapa segue o estoque do local. Um mapa rabiscado por local.
+  - Equipamento: dá para levar arma e até 2 bandagens do estoque. Voltam se o sobrevivente voltar.
+  - Combate: três tipos de zumbi (comum, corredor, brutamontes) e 2 pedras por incursão para distrair (T).
+  - Ordens permanentes: repetir uma expedição toda noite e fila de construção.
+  - Modo de espera: após 24h reais sem comando, o grupo consome menos e ninguém bate na porta.
+  - Emergência: o encurralado aguenta 12h reais além da volta do grupo.
+
+Balanceamento atual (`npm run balance`, 40 sementes): sem nenhuma visita, a comunidade dura cerca de 7 dias de jogo. Com uma única visita deixando ordens permanentes, cerca de 17 dias (8 dias reais). Um jogador casual simulado (2 visitas por dia, sem incursões ativas) dura cerca de 23 dias.
 
 Controles da incursão: setas/WASD movem. Andar até uma porta abre, andar até um zumbi ataca. E procura, Espaço espera, X extrai, P/F abrem ou forçam portas trancadas, B faz curativo.

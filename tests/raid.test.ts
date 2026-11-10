@@ -65,8 +65,8 @@ describe('ruído', () => {
   it('zumbis dentro do raio vão investigar a origem; fora do raio, não', () => {
     const s = createRaid(5, lena);
     s.zombies = [
-      { id: 0, pos: { x: 5, y: 5 }, hp: 2, state: 'idle', target: null, moveAcc: 0 },
-      { id: 1, pos: { x: 15, y: 5 }, hp: 2, state: 'idle', target: null, moveAcc: 0 },
+      { id: 0, kind: 'walker', pos: { x: 5, y: 5 }, hp: 2, state: 'idle', target: null, moveAcc: 0 },
+      { id: 1, kind: 'walker', pos: { x: 15, y: 5 }, hp: 2, state: 'idle', target: null, moveAcc: 0 },
     ];
     propagateNoise(s, [{ pos: { x: 7, y: 5 }, radius: 3 }]);
     expect(s.zombies[0].state).toBe('investigating');
