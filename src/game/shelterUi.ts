@@ -9,9 +9,19 @@ import { SIGNAL_HOURS, evacuationNeeds, goalStage, hasUndiscovered, workEfficien
 import type { DiaryEntry, Emotion, ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 
 export type View = 'shelter' | 'map';
+/** Abas do painel. Abrigo e Bancada mostram o abrigo; Mapa mostra a região; Diário não troca a cena. */
+export type Tab = 'home' | 'bench' | 'map' | 'log';
+
+export interface HudEls {
+  hud: HTMLElement;
+  /** Barra de status acima do jogo: relógio e recursos, sempre à vista. */
+  top: HTMLElement;
+  /** Última linha do diário, logo abaixo do jogo. */
+  ticker: HTMLElement;
+}
 
 type Cmd =
-  | { cmd: 'view'; view: View }
+  | { cmd: 'tab'; tab: Tab }
   | { cmd: 'task'; id: string; task: TaskId }
   | { cmd: 'talk'; id: string }
   | { cmd: 'planRaid'; id: string }
@@ -41,6 +51,8 @@ export interface ShelterUiHooks {
   skip: (hours: number) => void;
   account: () => Account;
   linkEmail: (email: string) => Promise<string>;
+  /** Retrato (data URL) do sobrevivente, tirado do sprite. */
+  portrait: (id: string) => string | null;
 }
 
 const EMOTION_LABEL: Record<Emotion, string> = { ok: 'bem', triste: 'triste', deprimido: 'deprimido(a)', quebrado: 'quebrado(a)' };
@@ -55,7 +67,12 @@ export function clock(hour: number): string {
 export class ShelterUi {
   private state: ShelterState | null = null;
   view: View = 'shelter';
+  tab: Tab = 'home';
   selected = 'market';
+  private hud: HTMLElement;
+  private nav: HTMLElement | null = null;
+  private body: HTMLElement | null = null;
+  private shownTab: Tab | null = null;
   private exp = { ids: new Set<string>(), risk: 'balanced' as RiskRule };
   private raidWho: string | null = null;
   private loadout = { weapon: false, bandages: 0 };
@@ -63,9 +80,10 @@ export class ShelterUi {
   private notice = '';
 
   constructor(
-    private hud: HTMLElement,
+    private els: HudEls,
     private hooks: ShelterUiHooks,
   ) {
+    const hud = (this.hud = els.hud);
     hud.addEventListener('click', (e) => {
       const el = (e.target as HTMLElement).closest('[data-cmd]') as HTMLElement | null;
       if (!el || !this.state || el.tagName === 'SELECT') return;
@@ -116,14 +134,12 @@ export class ShelterUi {
       });
     };
     switch (c.cmd) {
-      case 'view':
-        this.view = c.view;
-        this.hooks.setView(c.view);
+      case 'tab':
+        this.openTab(c.tab);
         return;
       case 'planRaid':
         this.raidWho = c.id;
-        this.view = 'map';
-        this.hooks.setView('map');
+        this.openTab('map');
         return;
       case 'raid': {
         const who = this.availableForRaid(s).find((v) => v.id === this.raidWho) ?? this.availableForRaid(s)[0];
@@ -172,6 +188,12 @@ export class ShelterUi {
     }
   }
 
+  private openTab(tab: Tab): void {
+    this.tab = tab;
+    if (tab !== 'log') this.view = tab === 'map' ? 'map' : 'shelter';
+    this.hooks.setView(this.view);
+  }
+
   private availableForRaid(s: ShelterState): ShelterSurvivor[] {
     return s.survivors.filter((v) => v.status === 'home' && v.expeditionId === null && v.raidDay !== dayOf(s.hour));
   }
@@ -179,31 +201,72 @@ export class ShelterUi {
   render(): void {
     const s = this.state;
     if (!s) return;
-    const body = this.view === 'map' ? this.mapView(s) : this.shelterView(s);
-    this.hud.innerHTML = `
-      ${this.header(s)}
+    // A incursão escreve no mesmo painel; na volta, a estrutura é refeita.
+    if (!this.body?.isConnected) {
+      this.hud.innerHTML = '<nav class="tabs"></nav><div class="hud-body"></div>';
+      this.nav = this.hud.querySelector('.tabs');
+      this.body = this.hud.querySelector('.hud-body');
+      this.shownTab = null;
+    }
+    const body = this.body!;
+    const content =
+      this.tab === 'map' ? this.mapView(s) : this.tab === 'bench' ? this.benchView(s) : this.tab === 'log' ? this.logView(s) : this.shelterView(s);
+    // Redesenhar não pode jogar a rolagem para o topo nem apagar o que está sendo digitado.
+    const sameTab = this.shownTab === this.tab;
+    const scroll = body.scrollTop;
+    const page = window.scrollY;
+    const typed = body.querySelector<HTMLInputElement>('input[name=email]')?.value;
+    this.els.top.innerHTML = this.topbar(s);
+    this.nav!.innerHTML = this.tabs(s);
+    body.innerHTML = `
       ${this.emergencies(s)}
       ${this.dilemmas(s)}
-      ${body}
       ${this.error ? `<div class="card bad small">${this.error}</div>` : ''}
-      <div class="card"><h3>Diário</h3><div class="log">${diaryHtml(s.diary.slice(-40))}</div></div>
-    `;
+      ${content}`;
+    const input = body.querySelector<HTMLInputElement>('input[name=email]');
+    if (input && typed) input.value = typed;
+    body.scrollTop = sameTab ? scroll : 0;
+    if (sameTab && window.scrollY !== page) window.scrollTo(0, page);
+    // No celular a página é que rola: trocar de aba volta para o começo dela.
+    if (!sameTab && this.shownTab !== null) window.scrollTo(0, 0);
+    this.shownTab = this.tab;
+    const last = s.diary[s.diary.length - 1];
+    this.els.ticker.innerHTML = last ? diaryHtml([last]) : '';
   }
 
-  private header(s: ShelterState): string {
-    const night = isNight(hourOfDay(s.hour));
+  private tabs(s: ShelterState): string {
     const alerts = pendingEmergencies(s).length;
+    const def = s.project ? RECIPES[s.project.recipe] : null;
+    const tab = (id: Tab, icon: string, label: string, badge = '') =>
+      `<button class="tab ${this.tab === id ? 'active' : ''}" data-cmd='${JSON.stringify({ cmd: 'tab', tab: id })}'><span class="tab-icon">${icon}</span><span class="tab-label">${label}</span>${badge ? `<span class="tab-badge">${badge}</span>` : ''}</button>`;
+    return (
+      tab('home', '🏠', 'Abrigo', s.dilemmas.length ? '🚪' : '') +
+      tab('bench', '🔨', 'Bancada', def ? `${Math.floor((s.project!.progress / def.hours) * 100)}%` : '') +
+      tab('map', '🗺️', 'Mapa', alerts ? '🚨' : '') +
+      tab('log', '📖', 'Diário')
+    );
+  }
+
+  /** Relógio, gente e recursos: o que precisa estar à vista em qualquer aba. */
+  private topbar(s: ShelterState): string {
+    const night = isNight(hourOfDay(s.hour));
     const acc = this.hooks.account();
-    return `
-      <div class="tabs">
-        ${cmdBtn('🏠 Abrigo', { cmd: 'view', view: 'shelter' }, this.view === 'shelter' ? 'tab active' : 'tab')}
-        ${cmdBtn(`🗺️ Mapa${alerts ? ' 🚨' : ''}`, { cmd: 'view', view: 'map' }, this.view === 'map' ? 'tab active' : 'tab')}
+    const alive = aliveSurvivors(s);
+    const home = alive.filter((v) => v.status === 'home').length;
+    const resources = SHOWN_RESOURCES.map((r) => {
+      const v = s.resources[r];
+      const low = (r === 'water' || r === 'food') && v < alive.length;
+      const bad = r === 'waste' && v > 8;
+      return `<span class="res ${low || bad ? 'bad' : ''}" title="${RESOURCES[r].name}">${RESOURCES[r].icon} ${fmt(v)}</span>`;
+    }).join('');
+    return `<div class="tb-main">
+        <span class="tb-clock">${night ? '🌙' : '☀️'} ${clock(s.hour)}</span>
+        <span class="tb-tags">${s.raining ? '<span title="Chovendo: o coletor enche">🌧️</span>' : ''}
+          <span title="Em casa / vivos">👥 ${home}/${alive.length}</span>
+          ${s.rationing ? '<span class="warn" title="Racionando">½🥫</span>' : ''}</span>
+        <span class="tb-net muted">${acc.online ? '☁️ online' : '💾 offline'}</span>
       </div>
-      <div class="card">
-        <div class="row"><span class="name">${night ? '🌙' : '☀️'} ${clock(s.hour)}</span><span>${s.raining ? '🌧️ chuva' : ''}</span></div>
-        <div class="row small muted"><span>${acc.online ? '☁️ online' : '💾 offline'} · 1 dia = 12h reais</span>
-          <span class="actions" title="Ferramentas de teste">${cmdBtn('+1h', { cmd: 'skip', hours: 1 })}${cmdBtn('+6h', { cmd: 'skip', hours: 6 })}</span></div>
-      </div>`;
+      <div class="tb-res">${resources}</div>`;
   }
 
   private emergencies(s: ShelterState): string {
@@ -246,22 +309,38 @@ export class ShelterUi {
   }
 
   private shelterView(s: ShelterState): string {
-    const home = s.survivors.filter((v) => v.status === 'home');
     const alive = s.survivors.filter((v) => v.status === 'home' || v.status === 'away');
-
-    const resources = SHOWN_RESOURCES.map((r) => {
-      const v = s.resources[r];
-      const low = (r === 'water' || r === 'food') && v < alive.length;
-      const bad = r === 'waste' && v > 8;
-      return `<div class="res ${low || bad ? 'bad' : ''}" title="${RESOURCES[r].name}">${RESOURCES[r].icon} <span>${fmt(v)}</span></div>`;
-    }).join('');
 
     const people = s.survivors
       .filter((v) => v.status !== 'dead' && v.status !== 'gone')
       .map((v) => this.survivorCard(s, v))
       .join('');
     const lost = s.survivors.filter((v) => v.status === 'dead' || v.status === 'gone');
+    const short = alive.length && (s.resources.food < alive.length || s.resources.water < alive.length);
 
+    return `
+      ${this.goalCard(s)}
+      <div class="card"><h3>Sobreviventes</h3>${people}${lost.length ? `<div class="small muted">Perdidos: ${lost.map((v) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ')}</div>` : ''}
+        <div class="row small ration"><label><input type="checkbox" ${s.rationing ? 'checked' : ''} data-cmd='${JSON.stringify({ cmd: 'ration', on: !s.rationing })}'/> Racionar (meia porção, humor cai)</label>${short ? '<span class="bad">falta comida ou água</span>' : ''}</div>
+      </div>
+      <div class="card"><h3>Expedições</h3>
+        ${this.expeditionList(s) || '<div class="small muted">Nenhuma planejada.</div>'}
+        <div class="actions" style="margin-top:6px">${cmdBtn('🗺️ Planejar no mapa', { cmd: 'tab', tab: 'map' })}</div>
+      </div>`;
+  }
+
+  private logView(s: ShelterState): string {
+    return `
+      <div class="card"><h3>Diário</h3><div class="log tall">${diaryHtml(s.diary.slice(-80))}</div></div>
+      ${this.accountCard()}
+      <div class="card"><h3>Ferramentas de teste</h3>
+        <div class="row small"><span class="muted">1 dia de jogo = 12h reais. Avançar o relógio:</span>
+          <span class="actions">${cmdBtn('+1h', { cmd: 'skip', hours: 1 })}${cmdBtn('+6h', { cmd: 'skip', hours: 6 })}</span></div>
+      </div>`;
+  }
+
+  private benchView(s: ShelterState): string {
+    const home = s.survivors.filter((v) => v.status === 'home');
     const project = s.project
       ? (() => {
           const def = RECIPES[s.project.recipe];
@@ -294,18 +373,12 @@ export class ShelterUi {
       })
       .join('');
 
+    const builders = home.filter((v) => v.task === 'craft').map((v) => v.name);
     return `
-      ${this.goalCard(s)}
-      <div class="card"><h3>Recursos</h3><div class="resgrid">${resources}</div>
-        <div class="row small" style="margin-top:6px"><label><input type="checkbox" ${s.rationing ? 'checked' : ''} data-cmd='${JSON.stringify({ cmd: 'ration', on: !s.rationing })}'/> Racionar (meia porção, humor cai)</label></div>
+      <div class="card"><h3>Em construção</h3>${project}${queue}
+        <div class="small muted" style="margin-top:6px">${builders.length ? `Na tarefa Construir: ${builders.join(', ')}.` : 'Ninguém está na tarefa Construir. Mude a tarefa de alguém na aba Abrigo.'}</div>
       </div>
-      <div class="card"><h3>Sobreviventes</h3>${people}${lost.length ? `<div class="small muted">Perdidos: ${lost.map((v) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ')}</div>` : ''}</div>
-      <div class="card"><h3>Expedições</h3>
-        ${this.expeditionList(s) || '<div class="small muted">Nenhuma planejada.</div>'}
-        <div class="actions" style="margin-top:6px">${cmdBtn('🗺️ Planejar no mapa', { cmd: 'view', view: 'map' })}</div>
-      </div>
-      <div class="card"><h3>Bancada</h3>${project}${queue}<div class="recipes">${recipes}</div></div>
-      ${this.accountCard()}`;
+      <div class="card"><h3>O que dá para fazer</h3><div class="recipes">${recipes}</div></div>`;
   }
 
   /** O objetivo de longo prazo: rádio → transmissão → suprimentos → partir. */
@@ -319,7 +392,8 @@ export class ShelterUi {
     };
     let detail = '';
     if (stage === 'radio') {
-      detail = `<div class="small muted">Construa o 📻 rádio na bancada (${describeCost(RECIPES.radio.cost)}).</div>`;
+      detail = `<div class="small muted">Construa o 📻 rádio na bancada (${describeCost(RECIPES.radio.cost)}).</div>
+        <div class="actions" style="margin-top:6px">${cmdBtn('🔨 Abrir a bancada', { cmd: 'tab', tab: 'bench' })}</div>`;
     } else if (stage === 'signal') {
       detail = `<div class="bar"><div style="width:${(s.signal / SIGNAL_HOURS) * 100}%"></div></div>
         <div class="small muted">${s.signal}/${SIGNAL_HOURS}h de escuta. Anda sozinho, toda noite, enquanto houver alguém em casa.</div>`;
@@ -419,8 +493,9 @@ export class ShelterUi {
     const bonds =
       friendsOf(s, v).map((o) => `<span class="chip" title="Amigos: rendem mais na mesma tarefa, se protegem em expedição e seguram o humor um do outro.">💛 ${o.name}</span>`).join('') +
       rivalsOf(s, v).map((o) => `<span class="chip neg" title="Desafetos: rendem menos na mesma tarefa e se atrapalham em expedição.">⚡ ${o.name}</span>`).join('');
+    const face = this.hooks.portrait(v.id);
     return `<div class="survivor-card">
-      <div class="row"><strong>${v.name}</strong>
+      <div class="row"><strong class="who-name">${face ? `<img class="face" src="${face}" alt=""/>` : ''}${v.name}</strong>
         <span class="small ${EMOTION_CLASS[emo]}">${away ? `<span class="warn">${v.status === 'raid' ? 'em incursão' : 'em expedição'}</span>` : `${EMOTION_LABEL[emo]}${v.sick ? ' · <span class="bad">doente</span>' : ''}${booked ? ' · <span class="warn">sai à noite</span>' : ''}`}</span></div>
       <div class="chips">${v.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}" title="${TRAITS[t].description}">${TRAITS[t].name}</span>`).join('')}${bonds}</div>
       <div class="stats">
@@ -430,7 +505,7 @@ export class ShelterUi {
       ${
         away
           ? ''
-          : `<div class="row small">
+          : `<div class="row small controls">
         <select data-task="${v.id}">${(Object.keys(TASKS) as TaskId[]).map((t) => `<option value="${t}" ${t === v.task ? 'selected' : ''}>${TASKS[t].name}</option>`).join('')}</select>
         ${eff === 0 ? '<span class="bad">não trabalha</span>' : eff < 1 ? '<span class="warn">rende pouco</span>' : ''}
         <span class="actions">

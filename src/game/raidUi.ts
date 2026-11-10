@@ -32,6 +32,8 @@ export class RaidUi {
     private scene: RaidScene,
     private hud: HTMLElement,
     private overlay: HTMLElement,
+    private top: HTMLElement,
+    private ticker: HTMLElement,
   ) {
     scene.setTileClickHandler((p) => this.click(p));
     hud.addEventListener('click', (e) => {
@@ -180,25 +182,26 @@ export class RaidUi {
       })
       .join('');
 
-    const actions: string[] = [btn('Esperar [Espaço]', { type: 'wait' })];
+    const key = (k: string) => `<kbd>${k}</kbd>`;
+    const actions: string[] = [btn(`Esperar ${key('Espaço')}`, { type: 'wait' }, 'kb-only')];
     actions.push(
-      `<button data-ui="throw" class="${this.throwing ? 'primary' : ''}" ${s.rocks > 0 ? '' : 'disabled'} title="Faz barulho longe de você: zumbis vão investigar">${this.throwing ? 'Clique onde jogar…' : `Arremessar pedra [T] · ${s.rocks}`}</button>`,
+      `<button data-ui="throw" class="${this.throwing ? 'primary' : ''}" ${s.rocks > 0 ? '' : 'disabled'} title="Faz barulho longe de você: zumbis vão investigar">${this.throwing ? 'Clique onde jogar…' : `🪨 Arremessar pedra ${key('T')} · ${s.rocks}`}</button>`,
     );
     const here = exitAt(s, s.player);
-    if (here && exitStatus(s, here.id) === 'open') actions.unshift(btn(`Extrair pela ${here.name.toLowerCase()} [X]`, { type: 'extract' }, 'primary'));
+    if (here && exitStatus(s, here.id) === 'open') actions.unshift(btn(`Extrair pela ${here.name.toLowerCase()} ${key('X')}`, { type: 'extract' }, 'primary'));
     for (const d of adjacentLockedDoors(s)) {
-      actions.push(btn(`Abrir fechadura [P] · ${hasTrait(s, 'mecanico') ? '1' : '3'} turnos`, { type: 'pick', x: d.x, y: d.y }));
-      actions.push(btn(`Forçar porta [F] · ${hasCrowbar(s) ? 'barulho' : 'MUITO barulho'}`, { type: 'force', x: d.x, y: d.y }));
+      actions.push(btn(`Abrir fechadura ${key('P')} · ${hasTrait(s, 'mecanico') ? '1' : '3'} turnos`, { type: 'pick', x: d.x, y: d.y }));
+      actions.push(btn(`Forçar porta ${key('F')} · ${hasCrowbar(s) ? 'barulho' : 'MUITO barulho'}`, { type: 'force', x: d.x, y: d.y }));
     }
     const bandage = s.backpack.indexOf('bandage');
-    if (bandage >= 0 && sv.hp < sv.maxHp) actions.push(btn('Curativo [B]', { type: 'use', index: bandage }));
+    if (bandage >= 0 && sv.hp < sv.maxHp) actions.push(btn(`Curativo ${key('B')}`, { type: 'use', index: bandage }));
 
     const near = adjacentContainers(s);
     const containers = near.length
       ? near
           .map((c) => {
             if (!c.searched) {
-              return `<div class="row"><span>${c.name}</span>${btn('Procurar [E] · 2 turnos', { type: 'search', containerId: c.id })}</div>`;
+              return `<div class="row"><span>${c.name}</span>${btn(`Procurar ${key('E')} · 2 turnos`, { type: 'search', containerId: c.id })}</div>`;
             }
             const items = c.items.length
               ? c.items
@@ -217,19 +220,29 @@ export class RaidUi {
       ? s.backpack.map((it, i) => `<div class="row"><span>${ITEMS[it].icon} ${ITEMS[it].name}</span>${btn('Largar', { type: 'drop', index: i })}</div>`).join('')
       : '<div class="muted small">Vazia.</div>';
 
-    this.hud.innerHTML = `
-      <div class="card">
-        <div class="row"><span class="name">${sv.name}</span><span class="bad" style="font-size:18px">${hearts}</span></div>
+    // O essencial fica na barra de cima, colada no jogo; o painel guarda o que se toca.
+    this.top.innerHTML = `<div class="tb-main">
+        <span class="tb-clock">${sv.name} <span class="bad">${hearts}</span></span>
+        <span class="tb-tags"><span title="Turno">⏱️ ${s.turn}</span>
+          <span title="Zumbis à vista" class="${seenZombies ? 'warn' : ''}">🧟 ${seenZombies}</span>
+          <span title="Turnos até a próxima leva da horda" class="${nextWave <= 2 ? 'bad' : ''}">📣 ${nextWave}</span>
+          <span title="Peso da mochila" class="${weight >= cap ? 'bad' : ''}">🎒 ${weight}/${cap}</span></span>
+      </div>`;
+    const last = this.log[this.log.length - 1];
+    this.ticker.innerHTML = last ? `<div class="${last.tone === 'info' ? '' : last.tone}">› ${last.text}</div>` : '';
+    const dir = (label: string, dx: number, dy: number, area: string) => `<button class="pad-${area}" data-action='${JSON.stringify({ type: 'move', dx, dy })}' aria-label="Mover">${label}</button>`;
+    const pad = `<div class="dpad">
+        ${dir('▲', 0, -1, 'up')}${dir('◀', -1, 0, 'left')}
+        <button class="pad-wait" data-action='${JSON.stringify({ type: 'wait' })}' aria-label="Esperar">⏸</button>
+        ${dir('▶', 1, 0, 'right')}${dir('▼', 0, 1, 'down')}
+      </div>`;
+
+    this.hud.innerHTML = `<div class="hud-body">
+      <div class="card"><h3>Ações</h3><div class="raid-controls">${pad}<div class="actions">${actions.join('')}</div></div></div>
+      <div class="card"><h3>Por perto</h3>${containers}</div>
+      <div class="card"><h3>Saídas</h3>${exits}
         <div class="chips">${sv.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}" title="${TRAITS[t].description}">${TRAITS[t].name}</span>`).join('')}</div>
       </div>
-      <div class="card">
-        <div class="row"><span>Turno</span><strong>${s.turn}</strong></div>
-        <div class="row"><span>Zumbis à vista</span><strong>${seenZombies}</strong></div>
-        <div class="row"><span>Próxima leva da horda</span><strong class="${nextWave <= 2 ? 'bad' : ''}">${nextWave} turnos</strong></div>
-        ${exits}
-      </div>
-      <div class="card"><h3>Ações</h3><div class="actions">${actions.join('')}</div></div>
-      <div class="card"><h3>Por perto</h3>${containers}</div>
       <div class="card">
         <h3>Mochila · ${weight}/${cap} kg · valor ${lootValue(s.backpack)}</h3>
         <div class="bar ${weight >= cap ? 'full' : ''}"><div style="width:${Math.min(100, (weight / cap) * 100)}%"></div></div>
@@ -239,7 +252,7 @@ export class RaidUi {
         .slice(-30)
         .map((e) => `<div class="${e.tone === 'info' ? '' : e.tone}">› ${e.text}</div>`)
         .join('')}</div></div>
-    `;
+    </div>`;
   }
 }
 

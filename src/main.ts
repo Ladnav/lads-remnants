@@ -6,6 +6,7 @@ import { RaidScene } from './game/RaidScene';
 import { RaidUi } from './game/raidUi';
 import { RegionScene } from './game/RegionScene';
 import { ShelterScene } from './game/ShelterScene';
+import { ensureLook, survivorLook } from './game/sprites';
 import { SHOWN_RESOURCES, ShelterUi, clock, diaryHtml, fmt, type View } from './game/shelterUi';
 import { LocalBackend, type Backend } from './net/backend';
 import { SupabaseBackend } from './net/supabase';
@@ -19,6 +20,8 @@ import type { ShelterState } from './sim/shelter/types';
 const hud = document.getElementById('hud')!;
 const overlay = document.getElementById('overlay')!;
 const hint = document.getElementById('hint')!;
+const topbar = document.getElementById('topbar')!;
+const ticker = document.getElementById('ticker')!;
 
 /** Online quando o Supabase está configurado (.env.local); `?offline` força o modo local. */
 function pickBackend(): Backend {
@@ -37,7 +40,22 @@ const shelterScene = new ShelterScene(() => render());
 const regionScene = new RegionScene(() => render());
 const raidScene = new RaidScene(() => raidUi.render());
 
-const shelterUi = new ShelterUi(hud, {
+const portraits = new Map<string, string>();
+/** Recorta o quadro de frente do sprite para usar como retrato no painel. */
+function portrait(id: string): string | null {
+  const cached = portraits.get(id);
+  if (cached) return cached;
+  if (!shelterScene.ready) return null;
+  try {
+    const url = game.textures.getBase64(ensureLook(shelterScene, survivorLook(id)), 'down0');
+    if (url) portraits.set(id, url);
+    return url || null;
+  } catch {
+    return null;
+  }
+}
+
+const shelterUi = new ShelterUi({ hud, top: topbar, ticker }, {
   changed: () => render(),
   command: async (cmd) => {
     // Otimista: aplica já (mesmas regras do servidor) e troca pelo estado oficial na resposta.
@@ -70,8 +88,9 @@ const shelterUi = new ShelterUi(hud, {
   },
   account: () => backend.account(),
   linkEmail: (email) => backend.linkEmail(email),
+  portrait,
 });
-const raidUi = new RaidUi(raidScene, hud, overlay);
+const raidUi = new RaidUi(raidScene, hud, overlay, topbar, ticker);
 regionScene.setSelectHandler((id) => shelterUi.select(id));
 
 const game = new Phaser.Game({
@@ -90,6 +109,7 @@ const game = new Phaser.Game({
       // `?sprites`: só a galeria de personagens, sem abrir o abrigo.
       if (new URLSearchParams(location.search).has('sprites')) {
         hud.style.display = 'none';
+        topbar.style.display = 'none';
         hint.textContent = 'Galeria de personagens. Tire o ?sprites do endereço para voltar ao jogo.';
         g.scene.add('gallery', new GalleryScene(), true);
         return;
@@ -193,7 +213,7 @@ async function playRaid(req: RaidRequest): Promise<void> {
     game.scene.stop(SCENE_OF[back]);
     mode = 'raid';
     shelterUi.detach();
-    hint.textContent = 'Setas/WASD mover · andar até uma porta abre · andar até um zumbi ataca · E procurar · T arremessar pedra · Espaço esperar · X extrair';
+    hint.textContent = 'Setas/WASD ou o direcional para mover · andar até uma porta abre · andar até um zumbi ataca · toque num container vizinho para procurar';
     raidUi.begin(ticket, (actions) => void endRaid(ticket.id, actions, back));
     game.scene.start('raid');
   } catch (e) {

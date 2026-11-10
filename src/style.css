@@ -9,6 +9,8 @@
   --warn: #e0a83a;
   --bad: #e0573a;
   --accent: #d9b45b;
+  --gap: 12px;
+  --nav-h: 58px;
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   color: var(--text);
   background: var(--bg);
@@ -22,29 +24,33 @@ body {
   margin: 0;
   min-height: 100vh;
   background: var(--bg);
+  -webkit-text-size-adjust: 100%;
 }
 
+/* ---------- Estrutura: jogo à esquerda, painel à direita ---------- */
 #app {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 784px) 400px;
   gap: 16px;
   padding: 16px;
   justify-content: center;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  align-items: start;
 }
 
 #stage {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 #game canvas {
   display: block;
   border: 1px solid var(--line);
   border-radius: 6px;
-  max-width: 100%;
+  width: 100% !important;
   height: auto !important;
+  touch-action: manipulation;
 }
 
 .hint {
@@ -53,18 +59,122 @@ body {
   color: var(--muted);
 }
 
+/* O painel ocupa a altura da janela e rola por dentro: a página não rola no computador. */
 #hud {
-  width: 320px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  position: sticky;
+  top: 16px;
+  height: calc(100vh - 32px);
+  min-height: 420px;
 }
 
+.hud-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* ---------- Barra de status ---------- */
+#topbar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#topbar:empty,
+#ticker:empty {
+  display: none;
+}
+
+.tb-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tb-clock {
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tb-tags {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tb-net {
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tb-res {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#ticker {
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+/* ---------- Abas ---------- */
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.tab.active {
+  background: var(--panel);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.tab-badge {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+/* ---------- Peças ---------- */
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px 12px;
+  flex-shrink: 0;
 }
 
 .card h3 {
@@ -87,6 +197,10 @@ body {
 .name {
   font-size: 18px;
   font-weight: 700;
+}
+
+.small {
+  font-size: 12px;
 }
 
 .chips {
@@ -122,6 +236,7 @@ button {
   border-radius: 4px;
   padding: 4px 8px;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 button:hover {
@@ -135,6 +250,52 @@ button.primary {
   font-weight: 700;
 }
 
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button:disabled:hover {
+  border-color: var(--line);
+}
+
+kbd {
+  font: inherit;
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+button.primary kbd {
+  color: inherit;
+  border-color: currentColor;
+}
+
+select,
+input[type='email'] {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+input[type='email'] {
+  flex: 1;
+  padding: 4px 6px;
+}
+
+.card > select {
+  width: 100%;
+  margin: 4px 0;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -146,8 +307,19 @@ button.primary {
   flex-direction: column-reverse;
   gap: 3px;
   font-size: 12px;
+  line-height: 1.4;
   max-height: 180px;
   overflow-y: auto;
+}
+
+.log.tall {
+  max-height: none;
+  overflow: visible;
+}
+
+.log.report {
+  max-height: 50vh;
+  flex-direction: column;
 }
 
 .bar {
@@ -167,6 +339,152 @@ button.primary {
   background: var(--bad);
 }
 
+.resgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 4px;
+}
+
+.res {
+  font-size: 13px;
+  background: var(--panel-2);
+  border-radius: 4px;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.res.good {
+  color: var(--good);
+}
+
+/* ---------- Sobreviventes ---------- */
+.survivor-card {
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.survivor-card:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.who-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.face {
+  width: 26px;
+  height: 26px;
+  object-fit: cover;
+  object-position: top;
+  image-rendering: pixelated;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.stat {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.stat .bar {
+  margin-top: 2px;
+}
+
+.controls select {
+  flex: 1;
+}
+
+.ration {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+.recipes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recipe {
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+}
+
+.recipe:first-child {
+  border-top: none;
+}
+
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.card.door {
+  border-color: var(--warn);
+}
+
+.card.alert {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 1px var(--bad) inset;
+}
+
+.card.door p,
+.card.alert p {
+  margin: 4px 0 8px;
+  line-height: 1.4;
+}
+
+/* ---------- Incursão ---------- */
+.raid-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.raid-controls .actions {
+  flex: 1;
+}
+
+/* Direcional: só aparece em tela de toque ou estreita. */
+.dpad {
+  display: none;
+  grid-template-areas: '. up .' 'left wait right' '. down .';
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(3, 48px);
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dpad button {
+  font-size: 18px;
+  padding: 0;
+}
+
+.pad-up { grid-area: up; }
+.pad-left { grid-area: left; }
+.pad-wait { grid-area: wait; }
+.pad-right { grid-area: right; }
+.pad-down { grid-area: down; }
+
+/* ---------- Telas por cima ---------- */
 #overlay {
   position: fixed;
   inset: 0;
@@ -175,7 +493,7 @@ button.primary {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  z-index: 10;
+  z-index: 30;
 }
 
 #overlay.hidden {
@@ -236,162 +554,181 @@ button.primary {
   color: var(--muted);
 }
 
-@media (max-width: 720px) {
+/* ---------- Toque: alvos maiores, direcional e nada de dicas de teclado ---------- */
+@media (pointer: coarse), (max-width: 900px) {
+  button,
+  select {
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+
+  /* 16px evita o zoom automático do iOS ao focar o campo. */
+  input[type='email'] {
+    min-height: 40px;
+    font-size: 16px;
+  }
+
+  input[type='checkbox'] {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+  }
+
+  .who label,
+  .ration label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+  }
+
+  .dpad {
+    display: grid;
+  }
+
+  kbd,
+  .kb-only {
+    display: none;
+  }
+}
+
+/* ---------- Celular: uma coluna, jogo preso no topo, abas embaixo ---------- */
+@media (max-width: 900px) {
   #app {
-    padding: 8px 16px;
+    display: block;
+    padding: 0;
   }
+
+  #stage {
+    gap: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  #topbar {
+    border: none;
+    border-radius: 0;
+    padding: 6px 10px;
+    padding-top: max(6px, env(safe-area-inset-top));
+  }
+
+  .tb-clock {
+    font-size: 15px;
+  }
+
+  /* Recursos numa faixa só, que desliza de lado. */
+  .tb-res {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -10px;
+    padding: 0 10px;
+  }
+
+  .tb-res::-webkit-scrollbar {
+    display: none;
+  }
+
+  #game canvas {
+    border: none;
+    border-radius: 0;
+  }
+
+  #ticker {
+    border: none;
+    border-radius: 0;
+    border-top: 1px solid var(--line);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #ticker > div {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hint {
+    display: none;
+  }
+
   #hud {
-    width: 100%;
+    position: static;
+    height: auto;
+    min-height: 0;
+    padding: 10px 10px calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
+  }
+
+  .hud-body {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    gap: 0;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .tab {
+    flex-direction: column;
+    gap: 2px;
+    height: var(--nav-h);
+    border: none;
+    border-radius: 0;
+    background: none;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .tab-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .tab.active {
+    background: var(--panel-2);
+    box-shadow: 0 2px 0 var(--accent) inset;
+  }
+
+  .tab-badge {
+    position: absolute;
+    top: 4px;
+    left: calc(50% + 12px);
+  }
+
+  .recipe .row,
+  .survivor-card .controls {
+    flex-wrap: wrap;
+  }
+
+  #overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .modal {
+    padding: 16px;
+    max-height: 92vh;
+  }
+
+  .modal .actions button {
+    flex: 1;
   }
 }
 
-/* ---------- Abrigo ---------- */
-#hud {
-  width: 380px;
-}
-
-.small {
-  font-size: 12px;
-}
-
-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-button:disabled:hover {
-  border-color: var(--line);
-}
-
-select {
-  font: inherit;
-  font-size: 12px;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 3px 4px;
-  max-width: 100%;
-}
-
-.card > select {
-  width: 100%;
-  margin: 4px 0;
-}
-
-.resgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 4px;
-}
-
-.res {
-  font-size: 13px;
-  background: var(--panel-2);
-  border-radius: 4px;
-  padding: 3px 6px;
-  white-space: nowrap;
-}
-
-.survivor-card {
-  border-top: 1px solid var(--line);
-  padding: 8px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.survivor-card:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-
-.stats {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-}
-
-.stat {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.stat .bar {
-  margin-top: 2px;
-}
-
-.recipes {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.recipe {
-  border-top: 1px solid var(--line);
-  padding-top: 4px;
-}
-
-.who {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 13px;
-  margin: 4px 0;
-}
-
-.card.door {
-  border-color: var(--warn);
-}
-
-.card.door p {
-  margin: 4px 0 8px;
-  line-height: 1.4;
-}
-
-.log.report {
-  max-height: 50vh;
-  flex-direction: column;
-}
-
-@media (max-width: 720px) {
-  #hud {
-    width: 100%;
+/* Com altura sobrando (celular em pé), o jogo fica à vista enquanto o painel rola. */
+@media (max-width: 900px) and (min-height: 620px) {
+  #stage {
+    position: sticky;
+    top: 0;
+    z-index: 15;
   }
-}
-
-/* ---------- Fase 3: abas, emergências ---------- */
-.tabs {
-  display: flex;
-  gap: 6px;
-}
-
-.tab {
-  flex: 1;
-  padding: 8px;
-  font-size: 13px;
-}
-
-.tab.active {
-  background: var(--panel);
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.card.alert {
-  border-color: var(--bad);
-  box-shadow: 0 0 0 1px var(--bad) inset;
-}
-
-.card.alert p {
-  margin: 4px 0 8px;
-  line-height: 1.4;
-}
-
-.res.good {
-  color: var(--good);
 }
