@@ -1119,3 +1119,17 @@ button.primary {
     gap: 10px;
   }
 }
+
+/* No celular o dedo sobre o jogo move a câmera, não a página. */
+@media (max-width: 900px) {
+  #game canvas {
+    touch-action: none;
+  }
+}
+
+/* A barra de abas do celular é opaca: nada do painel aparece por trás dela. */
+@media (max-width: 900px) {
+  .tabs {
+    background: #141514;
+  }
+}

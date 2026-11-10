@@ -4,7 +4,7 @@ import { hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState } from '../sim/shelter/types';
 import { ensureIcon, iconFor } from './icons';
 import { NightLight, makeRain, type LightSource } from './night';
-import { TILE, WALL_H, box, setupObliqueCamera, shade } from './oblique';
+import { TAP_SLOP, TILE, WALL_H, box, enablePan, setupObliqueCamera, shade } from './oblique';
 import { Actor, survivorLook } from './sprites';
 
 const W = 28;
@@ -59,13 +59,17 @@ export class RegionScene extends Phaser.Scene {
     this.events.once('shutdown', () => (this.ready = false));
     this.labels = [];
     setupObliqueCamera(this);
+    // No celular começa olhando para o abrigo e os locais mais próximos.
+    enablePan(this, W * TILE, H * TILE, { x: (SHELTER_POS[0] + 3) * TILE, y: (SHELTER_POS[1] - 4) * TILE });
     this.drawCity();
     this.gfx = this.add.graphics().setDepth(20);
     this.routes = this.add.graphics().setDepth(30);
     this.night = new NightLight(this, W * TILE, H * TILE + WALL_H);
     this.rain = makeRain(this, 0, -WALL_H - 40, W * TILE + 40, H * TILE, 8);
     this.time.addEvent({ delay: 170, loop: true, callback: () => this.night.flicker() });
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+    // Escolhe no soltar, e só se o dedo não arrastou o mapa.
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      if (p.getDistance() > TAP_SLOP) return;
       const hit = LOCATIONS.find((l) => {
         const r = landmark(l.pos);
         return p.worldX >= r.x && p.worldX <= r.x + r.w && p.worldY >= r.y - 30 && p.worldY <= r.y + r.d + 18;

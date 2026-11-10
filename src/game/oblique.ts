@@ -26,6 +26,27 @@ export function setupObliqueCamera(scene: Phaser.Scene): void {
   sharpText(scene);
 }
 
+/** Quanto a câmera aproxima em tela estreita. */
+const NARROW_ZOOM = 1.8;
+/** Arrasto menor que isto (em pixels do canvas) ainda conta como toque. */
+export const TAP_SLOP = 10 * RES;
+
+/**
+ * Em tela estreita a cena inteira não cabe legível: a câmera aproxima, começa em `focus`
+ * e anda com o dedo. Em tela larga não faz nada. Devolve se a câmera ficou solta.
+ */
+export function enablePan(scene: Phaser.Scene, w: number, h: number, focus: { x: number; y: number }): boolean {
+  if (!window.matchMedia('(max-width: 900px)').matches) return false;
+  const cam = scene.cameras.main;
+  cam.setOrigin(0.5, 0.5).setZoom(RES * NARROW_ZOOM).setBounds(0, -WALL_H, w, h + WALL_H).centerOn(focus.x, focus.y);
+  scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+    if (!p.isDown) return;
+    cam.scrollX -= (p.x - p.prevPosition.x) / cam.zoom;
+    cam.scrollY -= (p.y - p.prevPosition.y) / cam.zoom;
+  });
+  return true;
+}
+
 /** Todo texto criado na cena nasce na resolução do canvas, senão fica borrado com o zoom. */
 export function sharpText(scene: Phaser.Scene): void {
   const add = scene.add as Phaser.GameObjects.GameObjectFactory & { sharp?: boolean };

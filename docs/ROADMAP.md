@@ -30,7 +30,7 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
 - [x] **Tela do grupo.** Uma visão geral dos personagens: grade de retratos grandes com nome,
   estado e tarefa, abrindo a ficha (`showProfile` em `src/main.ts`) ao clicar. Incluir mortos
   e quem partiu, em tom apagado.
-- [ ] **Câmera no celular.** Em tela estreita o abrigo e o mapa encolhem demais. Aproximar a
+- [x] **Câmera no celular.** Em tela estreita o abrigo e o mapa encolhem demais. Aproximar a
   câmera e permitir arrastar, como a incursão já faz seguindo o personagem.
 - [ ] **Som.** Ambiente (chuva, vento, noite) e efeitos curtos (porta, golpe, aviso), gerados
   por WebAudio, sem baixar arquivos. Com botão de mudo que fica salvo no navegador.
