@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { RESOURCES, type ResourceId } from './data/shelter';
+import { GalleryScene } from './game/GalleryScene';
 import { TILE, WALL_H } from './game/oblique';
 import { RaidScene } from './game/RaidScene';
 import { RaidUi } from './game/raidUi';
@@ -85,6 +86,13 @@ const game = new Phaser.Game({
       g.scene.add('raid', raidScene, false);
       g.scene.add('shelter', shelterScene, false);
       g.scene.add('region', regionScene, false);
+      // `?sprites`: só a galeria de personagens, sem abrir o abrigo.
+      if (new URLSearchParams(location.search).has('sprites')) {
+        hud.style.display = 'none';
+        hint.textContent = 'Galeria de personagens. Tire o ?sprites do endereço para voltar ao jogo.';
+        g.scene.add('gallery', new GalleryScene(), true);
+        return;
+      }
       void boot();
     },
   },
@@ -156,7 +164,7 @@ setInterval(() => {
 }, 1000);
 
 setInterval(() => {
-  if (!backend.online || !shelter || mode === 'raid' || busy) return;
+  if (!backend?.online || !shelter || mode === 'raid' || busy) return;
   backend
     .load()
     .then((s) => {

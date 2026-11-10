@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { RECIPES } from '../data/shelter';
 import { emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState, ShelterSurvivor } from '../sim/shelter/types';
-import { TILE, WALL_H, box, feet, figure, rowDepth, setupObliqueCamera, wall } from './oblique';
+import { TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, wall } from './oblique';
+import { Actor, survivorLook, type Pose } from './sprites';
 
 const W = 28;
 const H = 20;
@@ -49,9 +50,9 @@ const SPOTS: Record<string, P[]> = {
   floorSleep: [[3, 4], [6, 4], [8, 5], [3, 7], [7, 7], [9, 4]],
 };
 
-const BODY = [0xc9a24a, 0x6a9a3a, 0x4f86b8, 0xa65b86, 0xc7782c, 0x7aa86a, 0x8b7bc0, 0xd08a4a];
-const SKIN = [0xf1c9a5, 0xc68e62, 0x8d5a3b, 0xe0ac85];
-const HAIR = [0x2b1d14, 0x5a3a20, 0x1a1a1a, 0x8a6a3a];
+const DIRS: P[] = [[0, 1], [1, 0], [-1, 0], [0, -1]];
+/** Milissegundos para atravessar um tile andando. */
+const STEP_MS = 190;
 
 const isWall = (() => {
   const grid: boolean[] = new Array(W * H).fill(false);
@@ -72,9 +73,16 @@ const isWall = (() => {
 const isYard = (x: number, y: number) => x >= 19 && y >= 9 && y <= 18;
 
 interface Sprite {
+  actor: Actor;
   body: Phaser.GameObjects.Container;
   icon: Phaser.GameObjects.Text;
   target: P | null;
+  /** Tiles que ainda faltam percorrer. */
+  path: P[];
+  /** Como fica ao chegar: em pé, na cama ou no chão. */
+  pose: Pose;
+  /** Está indo embora pela porta; some ao chegar nela. */
+  leaving: boolean;
 }
 
 export class ShelterScene extends Phaser.Scene {
@@ -86,6 +94,10 @@ export class ShelterScene extends Phaser.Scene {
   private night!: Phaser.GameObjects.Rectangle;
   private sprites = new Map<string, Sprite>();
   private decor: Phaser.GameObjects.GameObject[] = [];
+  /** Tiles ocupados por móveis: ninguém atravessa, só chega neles. */
+  private blocked = new Set<number>();
+  /** Falso até o primeiro desenho: quem já estava em casa aparece no lugar, sem andar da porta. */
+  private populated = false;
   private onReady: () => void;
 
   constructor(onReady: () => void) {
@@ -97,6 +109,7 @@ export class ShelterScene extends Phaser.Scene {
     this.ready = true;
     this.events.once('shutdown', () => (this.ready = false));
     this.sprites.clear();
+    this.populated = false;
     this.decor = [];
     setupObliqueCamera(this);
     this.floor = this.add.graphics().setDepth(0);
@@ -233,11 +246,19 @@ export class ShelterScene extends Phaser.Scene {
   }
 
   private drawPeople(s: ShelterState): void {
+    this.blocked = furniture(s);
     const home = s.survivors.filter((v) => v.status === 'home');
     for (const [id, sp] of this.sprites) {
-      if (!home.some((v) => v.id === id)) {
-        sp.body.destroy();
-        this.sprites.delete(id);
+      const v = s.survivors.find((x) => x.id === id);
+      if (v?.status === 'home' || sp.leaving) continue;
+      if (v && (v.status === 'away' || v.status === 'raid' || v.status === 'gone')) {
+        // Sai andando pela porta da frente.
+        sp.leaving = true;
+        sp.pose = 'stand';
+        sp.icon.setText('');
+        this.goTo(sp, [FRONT_DOOR[0], FRONT_DOOR[1] - 1]);
+      } else {
+        this.remove(id);
       }
     }
     const night = isNight(hourOfDay(s.hour));
@@ -245,52 +266,138 @@ export class ShelterScene extends Phaser.Scene {
     let bedIndex = 0;
     home.forEach((v) => {
       let spot: P;
+      let pose: Pose = 'stand';
       if (night && v.task !== 'guard') {
-        spot = bedIndex < s.buildings.bed ? BED_SLOTS[bedIndex] : SPOTS.floorSleep[(bedIndex - s.buildings.bed) % SPOTS.floorSleep.length];
+        const inBed = bedIndex < s.buildings.bed;
+        spot = inBed ? BED_SLOTS[bedIndex] : SPOTS.floorSleep[(bedIndex - s.buildings.bed) % SPOTS.floorSleep.length];
+        pose = inBed ? 'bed' : 'floor';
         bedIndex++;
       } else {
         const list = SPOTS[v.task];
         const k = (used[v.task] = (used[v.task] ?? -1) + 1);
         spot = list[k % list.length];
       }
-      const sp = this.sprites.get(v.id) ?? this.makeSprite(v, s.survivors.indexOf(v));
+      const sp = this.sprites.get(v.id) ?? this.makeSprite(v, this.populated ? null : spot);
       sp.icon.setText(statusIcon(v, night));
-      if (!sp.target || sp.target[0] !== spot[0] || sp.target[1] !== spot[1]) {
-        sp.target = spot;
-        const to = feet(spot[0], spot[1]);
-        this.tweens.killTweensOf(sp.body);
-        this.tweens.add({ targets: sp.body, x: to.x, y: to.y, duration: 1200, ease: 'Sine.easeInOut' });
-      }
+      const moved = sp.leaving || !sp.target || sp.target[0] !== spot[0] || sp.target[1] !== spot[1];
+      sp.leaving = false;
+      sp.pose = pose;
+      if (moved) this.goTo(sp, spot);
+      else if (!sp.path.length && !this.tweens.isTweening(sp.body)) sp.actor.setPose(pose);
     });
+    this.populated = true;
   }
 
-  private makeSprite(v: ShelterSurvivor, i: number): Sprite {
-    const start = feet(FRONT_DOOR[0], FRONT_DOOR[1] - 1);
-    const body = figure(this, { body: BODY[i % BODY.length], skin: SKIN[i % SKIN.length], hair: HAIR[(i * 3) % HAIR.length] });
+  private makeSprite(v: ShelterSurvivor, at: P | null): Sprite {
+    const start = at ? feet(at[0], at[1]) : feet(FRONT_DOOR[0], FRONT_DOOR[1] - 1);
+    const actor = new Actor(this, survivorLook(v.id));
+    const body = actor.container;
     const name = this.add
       .text(0, 3, v.name, { fontFamily: 'monospace', fontSize: '9px', color: '#f1ebe0', backgroundColor: '#00000066', padding: { x: 2, y: 0 } })
       .setOrigin(0.5, 0);
-    const icon = this.add.text(0, -34, '', { fontSize: '13px' }).setOrigin(0.5, 1);
+    const icon = this.add.text(0, -40, '', { fontSize: '13px' }).setOrigin(0.5, 1);
     body.add([name, icon]);
     body.setPosition(start.x, start.y);
-    const sp: Sprite = { body, icon, target: null };
+    if (!at) actor.face('up');
+    const sp: Sprite = { actor, body, icon, target: at, path: [], pose: 'stand', leaving: false };
     this.sprites.set(v.id, sp);
     return sp;
   }
 
+  private remove(id: string): void {
+    const sp = this.sprites.get(id);
+    if (!sp) return;
+    this.tweens.killTweensOf(sp.body);
+    sp.body.destroy();
+    this.sprites.delete(id);
+  }
+
+  /** Tile onde o boneco está agora (pelos pés). */
+  private tileOf(sp: Sprite): P {
+    const x = Phaser.Math.Clamp(Math.floor(sp.body.x / TILE), 0, W - 1);
+    const y = Phaser.Math.Clamp(Math.round((sp.body.y - (TILE - 6)) / TILE), 0, H - 1);
+    return [x, y];
+  }
+
+  private goTo(sp: Sprite, spot: P): void {
+    sp.target = spot;
+    sp.path = this.route(this.tileOf(sp), spot);
+    this.tweens.killTweensOf(sp.body);
+    this.step(sp);
+  }
+
+  /** Anda um tile do caminho e chama a si mesmo até chegar. */
+  private step(sp: Sprite): void {
+    const next = sp.path.shift();
+    if (!next) {
+      sp.actor.setWalking(false);
+      if (sp.leaving) {
+        for (const [id, other] of this.sprites) if (other === sp) this.remove(id);
+        return;
+      }
+      sp.actor.face('down');
+      sp.actor.setPose(sp.pose);
+      return;
+    }
+    const to = feet(next[0], next[1]);
+    const dist = Math.hypot(to.x - sp.body.x, to.y - sp.body.y);
+    sp.actor.setPose('stand');
+    sp.actor.faceDelta(to.x - sp.body.x, to.y - sp.body.y);
+    sp.actor.setWalking(true);
+    this.tweens.add({ targets: sp.body, x: to.x, y: to.y, duration: Math.max(40, (dist / TILE) * STEP_MS), onComplete: () => this.step(sp) });
+  }
+
+  /** Menor caminho pelo grid (busca em largura), passando pelos vãos das paredes. */
+  private route(from: P, to: P): P[] {
+    const start = from[1] * W + from[0];
+    const goal = to[1] * W + to[0];
+    const prev = new Map<number, number>([[start, -1]]);
+    const queue = [start];
+    for (let q = 0; q < queue.length && !prev.has(goal); q++) {
+      const c = queue[q];
+      for (const [dx, dy] of DIRS) {
+        const nx = (c % W) + dx;
+        const ny = Math.floor(c / W) + dy;
+        const n = ny * W + nx;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H || prev.has(n) || isWall(nx, ny)) continue;
+        if (n !== goal && this.blocked.has(n)) continue;
+        prev.set(n, c);
+        queue.push(n);
+      }
+    }
+    // O último passo sempre acerta a posição exata, mesmo que já esteja no tile.
+    if (!prev.has(goal) || start === goal) return [to];
+    const path: P[] = [];
+    for (let c = goal; c !== start; c = prev.get(c)!) path.unshift([c % W, Math.floor(c / W)]);
+    return path;
+  }
+
   private fidget(): void {
     for (const sp of this.sprites.values()) {
-      if (!sp.target || Math.random() > 0.35 || this.tweens.isTweening(sp.body)) continue;
+      if (!sp.target || sp.pose !== 'stand' || sp.leaving || sp.path.length) continue;
+      if (Math.random() > 0.35 || this.tweens.isTweening(sp.body)) continue;
       const base = feet(sp.target[0], sp.target[1]);
-      this.tweens.add({
-        targets: sp.body,
-        x: base.x + Phaser.Math.Between(-6, 6),
-        y: base.y + Phaser.Math.Between(-3, 3),
-        duration: 600,
-        ease: 'Sine.easeInOut',
-      });
+      const dx = Phaser.Math.Between(-6, 6);
+      sp.actor.face(dx < -2 ? 'left' : dx > 2 ? 'right' : 'down');
+      this.tweens.add({ targets: sp.body, x: base.x + dx, y: base.y + Phaser.Math.Between(-3, 3), duration: 600, ease: 'Sine.easeInOut' });
     }
   }
+}
+
+/** Tiles com móveis construídos (camas, bancadas, hortas, caixotes). */
+function furniture(s: ShelterState): Set<number> {
+  const out = new Set<number>();
+  const add = (x: number, y: number) => out.add(y * W + x);
+  BED_SLOTS.slice(0, s.buildings.bed).forEach(([x, y]) => add(x, y));
+  if (s.buildings.workbench) add(...STATIONS.workbench);
+  if (s.buildings.stove) add(...STATIONS.stove);
+  if (s.buildings.filter) add(...STATIONS.filter);
+  if (s.buildings.latrine) add(...STATIONS.latrine);
+  STATIONS.collectors.slice(0, s.buildings.rainCollector).forEach(([x, y]) => add(x, y));
+  STATIONS.gardens.slice(0, s.buildings.garden).forEach(([x, y]) => {
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 3; i++) add(x + i, y + j);
+  });
+  return out;
 }
 
 /** O balão mais urgente acima da cabeça. */

@@ -3,6 +3,7 @@ import { LOCATIONS, SHELTER_POS } from '../data/shelter';
 import { hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState } from '../sim/shelter/types';
 import { TILE, WALL_H, box, setupObliqueCamera, shade } from './oblique';
+import { Actor, survivorLook } from './sprites';
 
 const W = 28;
 const H = 20;
@@ -168,11 +169,21 @@ export class RegionScene extends Phaser.Scene {
       const color = e.emergency?.state === 'pending' ? 0xe0573a : 0xd9b45b;
       dashed(r, home.x, home.y, to.x, to.y, color, e.departed ? 1 : 0.5);
       if (e.departed) {
-        const who = s.survivors.filter((v) => v.expeditionId === e.id).map((v) => v.name[0]).join('');
-        if (who) {
-          r.fillStyle(0xf1ebe0).fillCircle(to.x + 30, to.y - 22, 10);
-          this.text(to.x + 30, to.y - 22, who, 11, 31, '#1a1712');
-        }
+        // Primeiro quarto da noite indo, último quarto voltando; no meio, no local.
+        const t = Phaser.Math.Clamp((s.hour - e.departHour) / Math.max(1, e.returnHour - e.departHour), 0, 1);
+        const k = e.emergency ? 1 : t < 0.25 ? t / 0.25 : t > 0.75 ? (1 - t) / 0.25 : 1;
+        const site = { x: to.x + TILE * 1.9, y: to.y + 10 };
+        const members = s.survivors.filter((v) => v.expeditionId === e.id);
+        members.forEach((v, i) => {
+          const a = new Actor(this, survivorLook(v.id));
+          a.container.setPosition(home.x + (site.x - home.x) * k + i * 13, home.y + 10 + (site.y - home.y - 10) * k).setDepth(31);
+          if (k < 1) {
+            const dir = t < 0.5 ? 1 : -1;
+            a.faceDelta((site.x - home.x) * dir, (site.y - home.y) * dir);
+            a.setWalking(true);
+          }
+          this.labels.push(a.container);
+        });
       }
     }
 

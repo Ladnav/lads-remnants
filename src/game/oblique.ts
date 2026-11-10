@@ -58,38 +58,6 @@ export function wall(g: Phaser.GameObjects.Graphics, tx: number, ty: number, fro
   g.fillStyle(shade(top, 1.12)).fillRect(px, py - WALL_H, TILE, 3);
 }
 
-export interface FigureStyle {
-  body: number;
-  skin: number;
-  hair?: number;
-  zombie?: boolean;
-}
-
-/**
- * Pessoa (ou zumbi) em pé, desenhada a partir dos pés. Devolve um container
- * posicionado em (0,0) = ponto dos pés; quem chama move e ajusta a profundidade.
- */
-export function figure(scene: Phaser.Scene, style: FigureStyle): Phaser.GameObjects.Container {
-  const g = scene.add.graphics();
-  g.fillStyle(0x000000, 0.35).fillEllipse(0, 0, 18, 6);
-  // pernas
-  g.fillStyle(style.zombie ? 0x3a3a30 : 0x2e2b3a).fillRect(-5, -9, 4, 9).fillRect(1, -9, 4, 9);
-  // tronco
-  g.fillStyle(style.body).fillRoundedRect(-7, -21, 14, 13, 3);
-  g.fillStyle(shade(style.body, 0.75)).fillRect(-7, -11, 14, 3);
-  // braços
-  if (style.zombie) {
-    g.fillStyle(style.skin).fillRect(-11, -19, 6, 3).fillRect(5, -18, 7, 3);
-  } else {
-    g.fillStyle(shade(style.body, 0.85)).fillRect(-9, -20, 3, 9).fillRect(6, -20, 3, 9);
-  }
-  // cabeça
-  g.fillStyle(style.skin).fillCircle(0, -26, 6);
-  if (style.hair !== undefined) g.fillStyle(style.hair).fillRect(-6, -32, 12, 4);
-  g.fillStyle(style.zombie ? 0xe0573a : 0x1a1712).fillRect(-3, -27, 2, 2).fillRect(1, -27, 2, 2);
-  return scene.add.container(0, 0, [g]);
-}
-
 /** Pés de quem está no tile (tx, ty). */
 export function feet(tx: number, ty: number): { x: number; y: number } {
   return { x: tx * TILE + TILE / 2, y: ty * TILE + TILE - 6 };

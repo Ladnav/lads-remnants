@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import type { ZombieKind } from '../data/zombies';
 import { idx } from '../sim/raid/grid';
 import { computeVisible, exitStatus } from '../sim/raid/raid';
 import type { RaidState, Tile, Vec } from '../sim/raid/types';
-import { TILE, WALL_H, box, feet, figure, rowDepth, setupObliqueCamera, shade, wall } from './oblique';
+import { TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, shade, wall } from './oblique';
+import { Actor, survivorLook, zombieLook } from './sprites';
 
 export { TILE } from './oblique';
 
@@ -14,18 +14,13 @@ const CONTAINER_COLOR: Record<string, number> = {
   Armário: 0x5a6a7a,
 };
 
-const ZOMBIE_LOOK: Record<ZombieKind, { body: number; skin: number; scale: number }> = {
-  walker: { body: 0x4a4a3a, skin: 0x7f9a5c, scale: 1 },
-  runner: { body: 0x7a2f2a, skin: 0xa9b86a, scale: 0.85 },
-  brute: { body: 0x2f3440, skin: 0x5f7a4a, scale: 1.35 },
-};
-
 /** Desenha o estado da incursão em 3/4. Não guarda regras: só lê o estado e repassa cliques. */
 export class RaidScene extends Phaser.Scene {
   private floor!: Phaser.GameObjects.Graphics;
   private rows: Phaser.GameObjects.Graphics[] = [];
-  private player: Phaser.GameObjects.Container | null = null;
-  private zombies = new Map<number, Phaser.GameObjects.Container>();
+  private player: Actor | null = null;
+  private playerId = 'marta';
+  private zombies = new Map<number, Actor>();
   private alerts = new Map<number, Phaser.GameObjects.Text>();
   private onTileClick: (p: Vec) => void = () => {};
   private onReady: () => void;
@@ -46,6 +41,11 @@ export class RaidScene extends Phaser.Scene {
       this.onTileClick({ x: Math.floor(p.worldX / TILE), y: Math.floor(p.worldY / TILE) });
     });
     this.onReady();
+  }
+
+  /** Quem está na incursão: define o visual do boneco. */
+  setPlayer(id: string): void {
+    this.playerId = id;
   }
 
   setTileClickHandler(fn: (p: Vec) => void): void {
@@ -140,23 +140,24 @@ export class RaidScene extends Phaser.Scene {
 
   private drawActors(s: RaidState, vis: boolean[]): void {
     if (!this.player) {
-      this.player = figure(this, { body: 0xc9a24a, skin: 0xf1c9a5, hair: 0x2b1d14 });
+      this.player = new Actor(this, survivorLook(this.playerId));
       const p = feet(s.player.x, s.player.y);
-      this.player.setPosition(p.x, p.y);
+      this.player.container.setPosition(p.x, p.y);
       // Câmera próxima, seguindo o sobrevivente: a névoa esconde o resto mesmo.
       this.cameras.main
         .setBounds(0, -WALL_H, s.width * TILE, s.height * TILE + WALL_H)
         .setZoom(1.7)
-        .startFollow(this.player, true, 0.12, 0.12, 0, 10);
+        .startFollow(this.player.container, true, 0.12, 0.12, 0, 10);
     }
     this.moveTo(this.player, s.player);
     if (s.status === 'dead') {
-      this.player.setAngle(90).setAlpha(0.7);
+      this.player.setPose('floor');
+      this.player.container.setAlpha(0.7);
     }
 
     for (const [id, c] of this.zombies) {
       if (!s.zombies.some((z) => z.id === id)) {
-        c.destroy();
+        c.container.destroy();
         this.zombies.delete(id);
         this.alerts.delete(id);
       }
@@ -164,28 +165,29 @@ export class RaidScene extends Phaser.Scene {
     for (const z of s.zombies) {
       let c = this.zombies.get(z.id);
       if (!c) {
-        const look = ZOMBIE_LOOK[z.kind];
-        c = figure(this, { body: look.body, skin: look.skin, zombie: true });
-        (c.getAt(0) as Phaser.GameObjects.Graphics).setScale(look.scale);
-        const alert = this.add.text(0, -40, '!', { fontFamily: 'monospace', fontSize: '14px', color: '#e0573a', fontStyle: 'bold' }).setOrigin(0.5);
-        c.add(alert);
+        c = new Actor(this, zombieLook(z.kind));
+        const alert = this.add.text(0, -44, '!', { fontFamily: 'monospace', fontSize: '14px', color: '#e0573a', fontStyle: 'bold' }).setOrigin(0.5);
+        c.container.add(alert);
         this.alerts.set(z.id, alert);
         const p = feet(z.pos.x, z.pos.y);
-        c.setPosition(p.x, p.y);
+        c.container.setPosition(p.x, p.y);
         this.zombies.set(z.id, c);
       }
-      c.setVisible(vis[idx(s, z.pos.x, z.pos.y)]);
+      c.container.setVisible(vis[idx(s, z.pos.x, z.pos.y)]);
       this.alerts.get(z.id)!.setVisible(z.state === 'chasing');
       this.moveTo(c, z.pos);
     }
   }
 
-  private moveTo(c: Phaser.GameObjects.Container, pos: Vec): void {
+  private moveTo(a: Actor, pos: Vec): void {
+    const c = a.container;
     const p = feet(pos.x, pos.y);
     c.setDepth(rowDepth(pos.y, 7));
     if (c.x === p.x && c.y === p.y) return;
     this.tweens.killTweensOf(c);
-    this.tweens.add({ targets: c, x: p.x, y: p.y, duration: 140, ease: 'Sine.easeOut' });
+    a.faceDelta(p.x - c.x, p.y - c.y);
+    a.setWalking(true);
+    this.tweens.add({ targets: c, x: p.x, y: p.y, duration: 160, ease: 'Sine.easeOut', onComplete: () => a.setWalking(false) });
   }
 
   /** Ondas de ruído achatadas pela perspectiva. */

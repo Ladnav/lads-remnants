@@ -53,6 +53,7 @@ export class RaidUi {
     this.onDone = onDone;
     this.throwing = false;
     const def = ticket.def;
+    this.scene.setPlayer(def.id);
     const s = (this.state = createRaid(ticket.seed, def, ticket.opts));
     const roof = s.exits.find((e) => e.id === 'roof');
     this.log = s.emergency
