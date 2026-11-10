@@ -19,6 +19,7 @@ import {
 import type { Action, RaidEvent, RaidState, Vec } from '../sim/raid/types';
 import type { RaidTicket } from '../sim/shelter/types';
 import { faceUrl } from './art';
+import { iconize } from './icons';
 import type { RaidScene } from './RaidScene';
 
 /** Interface da incursão ativa: HUD lateral, teclado e tela de fim. */
@@ -155,6 +156,7 @@ export class RaidUi {
         <div class="actions"><button class="primary" id="raid-done">Voltar ao abrigo</button></div>
         <p style="font-size:11px">Semente ${s.seed} · ${s.log.length} ações registradas.</p>
       </div>`;
+    iconize(this.overlay);
     this.overlay.classList.remove('hidden');
     document.getElementById('raid-done')!.addEventListener('click', () => {
       this.state = null;
@@ -256,6 +258,7 @@ export class RaidUi {
         .map((e) => `<div class="${e.tone === 'info' ? '' : e.tone}">› ${e.text}</div>`)
         .join('')}</div></div>
     </div>`;
+    for (const el of [this.top, this.ticker, this.hud]) iconize(el);
   }
 }
 

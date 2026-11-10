@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 import { TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, wall } from './oblique';
+import { ensureIcon, iconFor } from './icons';
 import { NightLight, type LightSource } from './night';
 import { Actor, survivorLook, type Pose } from './sprites';
 
@@ -141,7 +142,7 @@ function floorTile(f: Phaser.GameObjects.Graphics, x: number, y: number, px: num
 interface Sprite {
   actor: Actor;
   body: Phaser.GameObjects.Container;
-  icon: Phaser.GameObjects.Text;
+  icon: Phaser.GameObjects.Image;
   target: P | null;
   /** Tiles que ainda faltam percorrer. */
   path: P[];
@@ -360,7 +361,7 @@ export class ShelterScene extends Phaser.Scene {
         // Sai andando pela porta da frente.
         sp.leaving = true;
         sp.pose = 'stand';
-        sp.icon.setText('');
+        sp.icon.setVisible(false);
         this.goTo(sp, [FRONT_DOOR[0], FRONT_DOOR[1] - 1]);
       } else {
         this.remove(id);
@@ -383,7 +384,9 @@ export class ShelterScene extends Phaser.Scene {
         spot = list[k % list.length];
       }
       const sp = this.sprites.get(v.id) ?? this.makeSprite(v, this.populated ? null : spot);
-      sp.icon.setText(statusIcon(v, night));
+      const balloon = iconFor(statusIcon(v, night));
+      if (balloon) sp.icon.setTexture(ensureIcon(this, balloon)).setDisplaySize(15, 15).setVisible(true);
+      else sp.icon.setVisible(false);
       const moved = sp.leaving || !sp.target || sp.target[0] !== spot[0] || sp.target[1] !== spot[1];
       sp.leaving = false;
       sp.pose = pose;
@@ -400,7 +403,7 @@ export class ShelterScene extends Phaser.Scene {
     const name = this.add
       .text(0, 3, v.name, { fontFamily: 'monospace', fontSize: '9px', color: '#f1ebe0', backgroundColor: '#00000066', padding: { x: 2, y: 0 } })
       .setOrigin(0.5, 0);
-    const icon = this.add.text(0, -40, '', { fontSize: '13px' }).setOrigin(0.5, 1);
+    const icon = this.add.image(0, -40, ensureIcon(this, 'sleep')).setOrigin(0.5, 1).setDisplaySize(15, 15).setVisible(false);
     body.add([name, icon]);
     body.setPosition(start.x, start.y);
     if (!at) actor.face('up');

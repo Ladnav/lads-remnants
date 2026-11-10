@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { RESOURCES, type ResourceId } from './data/shelter';
 import { banner, faceLargeUrl, faceUrl } from './game/art';
 import { GalleryScene } from './game/GalleryScene';
+import { iconize } from './game/icons';
 import { RES, TILE, WALL_H } from './game/oblique';
 import { RaidScene } from './game/RaidScene';
 import { RaidUi } from './game/raidUi';
@@ -258,6 +259,7 @@ window.addEventListener('pagehide', () => backend.leaving());
 
 function modal(inner: string): void {
   overlay.innerHTML = `<div class="modal">${inner}</div>`;
+  iconize(overlay);
   overlay.classList.remove('hidden');
 }
 

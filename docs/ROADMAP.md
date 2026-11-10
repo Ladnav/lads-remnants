@@ -16,11 +16,11 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
   e passar para o próximo.
 
 ## Visual e usabilidade (podem ser feitos sem supervisão)
-- [ ] **Ícones próprios no painel.** Trocar os emojis de recursos (`RESOURCES` em
+- [x] **Ícones próprios no painel.** Trocar os emojis de recursos (`RESOURCES` em
   `src/data/shelter.ts`, usados em `src/game/shelterUi.ts`), das abas e dos locais por ícones
   de pixel art gerados por código (mesma ideia de `src/game/sprites.ts`: grade pequena,
   contorno escuro, exportados como data URL). Emojis mudam de cara em cada aparelho.
-- [ ] **Balões de status no abrigo.** Os balões acima das cabeças (`statusIcon` em
+- [x] **Balões de status no abrigo.** Os balões acima das cabeças (`statusIcon` em
   `src/game/ShelterScene.ts`) ainda são emojis; trocar pelos ícones do item anterior.
 - [ ] **Mapa da região no nível do abrigo.** Em `src/game/RegionScene.ts`: sombra na base dos
   prédios, variação nas ruas e quadras, noite com focos de luz usando `src/game/night.ts`,

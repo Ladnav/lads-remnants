@@ -1,5 +1,6 @@
 import { ITEMS } from '../data/items';
 import { banner, placeUrl } from './art';
+import { iconize } from './icons';
 import { LOCATIONS, RECIPES, RESOURCES, RISK_RULES, TASKS, locationById, type RecipeId, type ResourceId, type RiskRule, type TaskId } from '../data/shelter';
 import { TRAITS } from '../data/survivors';
 import type { Account } from '../net/backend';
@@ -237,6 +238,7 @@ export class ShelterUi {
     this.shownTab = this.tab;
     const last = s.diary[s.diary.length - 1];
     this.els.ticker.innerHTML = last ? diaryHtml([last]) : '';
+    for (const el of [this.els.top, this.nav!, body, this.els.ticker]) iconize(el);
   }
 
   private tabs(s: ShelterState): string {

@@ -1006,3 +1006,22 @@ button.primary {
     padding: 10px 16px;
   }
 }
+
+/* ---------- Ícones em pixel art ---------- */
+.ico {
+  width: 1.3em;
+  height: 1.3em;
+  vertical-align: -0.3em;
+  image-rendering: auto;
+}
+
+.tb-clock .ico,
+.name .ico {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+}
+
+.res .ico {
+  margin-right: 1px;
+}
