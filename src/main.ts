@@ -10,7 +10,7 @@ import { RaidUi } from './game/raidUi';
 import { RegionScene } from './game/RegionScene';
 import { ShelterScene } from './game/ShelterScene';
 import { ensureLook, survivorLook } from './game/sprites';
-import { SHOWN_RESOURCES, ShelterUi, clock, diaryHtml, fmt, profileHtml, type View } from './game/shelterUi';
+import { SHOWN_RESOURCES, ShelterUi, clock, diaryHtml, fmt, groupHtml, profileHtml, type View } from './game/shelterUi';
 import { LocalBackend, type Backend } from './net/backend';
 import { SupabaseBackend } from './net/supabase';
 import { applyCommand, type RaidRequest } from './server/game';
@@ -95,6 +95,7 @@ const shelterUi = new ShelterUi({ hud, top: topbar, ticker }, {
   linkEmail: (email) => backend.linkEmail(email),
   portrait,
   profile: (id) => showProfile(id),
+  group: () => showGroup(),
 });
 const raidUi = new RaidUi(raidScene, hud, overlay, topbar, ticker);
 regionScene.setSelectHandler((id) => shelterUi.select(id));
@@ -306,12 +307,26 @@ function showProfile(id: string): void {
   if (i < 0) return;
   const v = list[i];
   modal(`${profileHtml(shelter, v, faceLargeUrl(v.id) ?? portrait(v.id))}
-      <div class="actions profile-nav"><button id="p-prev">◀ ${list[(i + list.length - 1) % list.length].name}</button><button class="primary" id="p-close">Fechar</button><button id="p-next">${list[(i + 1) % list.length].name} ▶</button></div>`);
+      <div class="actions profile-nav"><button id="p-group">👥 Grupo</button><button id="p-prev">◀ ${list[(i + list.length - 1) % list.length].name}</button><button class="primary" id="p-close">Fechar</button><button id="p-next">${list[(i + 1) % list.length].name} ▶</button></div>`);
   overlay.querySelector('.modal')!.classList.add('wide');
   const close = () => overlay.classList.add('hidden');
   document.getElementById('p-close')!.addEventListener('click', close);
+  document.getElementById('p-group')!.addEventListener('click', () => showGroup());
   document.getElementById('p-prev')!.addEventListener('click', () => showProfile(list[(i + list.length - 1) % list.length].id));
   document.getElementById('p-next')!.addEventListener('click', () => showProfile(list[(i + 1) % list.length].id));
+  overlay.onclick = (e) => {
+    if (e.target === overlay && document.getElementById('p-close')) close();
+  };
+}
+
+/** Tela do grupo: todos os retratos; clicar em um abre a ficha. */
+function showGroup(): void {
+  modal(`${groupHtml(shelter, (id) => faceLargeUrl(id) ?? portrait(id))}
+      <div class="actions profile-nav"><span></span><button class="primary" id="p-close">Fechar</button><span></span></div>`);
+  overlay.querySelector('.modal')!.classList.add('wide');
+  const close = () => overlay.classList.add('hidden');
+  document.getElementById('p-close')!.addEventListener('click', close);
+  overlay.querySelectorAll<HTMLElement>('[data-profile]').forEach((el) => el.addEventListener('click', () => showProfile(el.dataset.profile!)));
   overlay.onclick = (e) => {
     if (e.target === overlay && document.getElementById('p-close')) close();
   };

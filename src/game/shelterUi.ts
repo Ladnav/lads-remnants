@@ -27,6 +27,7 @@ type Cmd =
   | { cmd: 'task'; id: string; task: TaskId }
   | { cmd: 'talk'; id: string }
   | { cmd: 'profile'; id: string }
+  | { cmd: 'group' }
   | { cmd: 'planRaid'; id: string }
   | { cmd: 'raid' }
   | { cmd: 'takeOver'; expId: number }
@@ -58,6 +59,8 @@ export interface ShelterUiHooks {
   portrait: (id: string) => string | null;
   /** Abre a ficha do personagem. */
   profile: (id: string) => void;
+  /** Abre a tela com todo o grupo. */
+  group: () => void;
 }
 
 const EMOTION_LABEL: Record<Emotion, string> = { ok: 'bem', triste: 'triste', deprimido: 'deprimido(a)', quebrado: 'quebrado(a)' };
@@ -162,6 +165,7 @@ export class ShelterUi {
       }
       case 'takeOver': this.hooks.takeOver(c.expId); return;
       case 'profile': this.hooks.profile(c.id); return;
+      case 'group': this.hooks.group(); return;
       case 'skip': this.hooks.skip(c.hours); return;
       case 'link': {
         const input = this.hud.querySelector<HTMLInputElement>('input[name=email]');
@@ -328,7 +332,7 @@ export class ShelterUi {
 
     return `
       ${this.goalCard(s)}
-      <div class="card"><h3>Sobreviventes</h3>${people}${lost.length ? `<div class="small muted">Perdidos: ${lost.map((v) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ')}</div>` : ''}
+      <div class="card"><div class="row head"><h3>Sobreviventes</h3>${cmdBtn('👥 Ver o grupo', { cmd: 'group' })}</div>${people}${lost.length ? `<div class="small muted">Perdidos: ${lost.map((v) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ')}</div>` : ''}
         <div class="row small ration"><label><input type="checkbox" ${s.rationing ? 'checked' : ''} data-cmd='${JSON.stringify({ cmd: 'ration', on: !s.rationing })}'/> Racionar (meia porção, humor cai)</label>${short ? '<span class="bad">falta comida ou água</span>' : ''}</div>
       </div>
       <div class="card"><h3>Expedições</h3>
@@ -527,6 +531,33 @@ export class ShelterUi {
 }
 
 const STATUS_LABEL: Record<ShelterSurvivor['status'], string> = { home: 'no abrigo', away: 'em expedição', raid: 'em incursão', dead: 'morto(a)', gone: 'foi embora' };
+
+/** O grupo inteiro de uma vez: um retrato por pessoa, com estado e tarefa. Quem se perdeu fica apagado, no fim. */
+export function groupHtml(s: ShelterState, face: (id: string) => string | null): string {
+  const lost = (v: ShelterSurvivor) => v.status === 'dead' || v.status === 'gone';
+  const card = (v: ShelterSurvivor) => {
+    const emo = emotionOf(v.mood);
+    const img = face(v.id);
+    const state = lost(v)
+      ? `<span class="bad">${STATUS_LABEL[v.status]}</span>`
+      : `<span class="${EMOTION_CLASS[emo]}">${STATUS_LABEL[v.status]} · ${EMOTION_LABEL[emo]}${v.sick ? ' · doente' : ''}</span>`;
+    const doing = lost(v) ? '' : v.status === 'home' ? TASKS[v.task].name : 'fora do abrigo';
+    return `<button class="gcard ${lost(v) ? 'lost' : ''}" data-profile="${v.id}">
+        <span class="gface">${img ? `<img src="${img}" alt="Retrato de ${v.name}"/>` : ''}</span>
+        <span class="gname">${v.name}</span>
+        <span class="small">${state}</span>
+        <span class="small muted">${doing}</span>
+        ${lost(v) ? '' : `<span class="gbars">${stat('Saúde', v.health, false)}${stat('Humor', v.mood, false)}</span>`}
+      </button>`;
+  };
+  const alive = s.survivors.filter((v) => !lost(v));
+  const gone = s.survivors.filter(lost);
+  return `<div class="group">
+      <h1>O grupo</h1>
+      <p>Dia ${dayOf(s.hour)}. ${alive.length} ${alive.length === 1 ? 'pessoa' : 'pessoas'} sob este teto${gone.length ? `, ${gone.length} que não ${gone.length === 1 ? 'está' : 'estão'} mais aqui` : ''}. Toque num retrato para abrir a ficha.</p>
+      <div class="ggrid">${[...alive, ...gone].map(card).join('')}</div>
+    </div>`;
+}
 
 /** Ficha do personagem: retrato grande, história, traços, estado e laços. */
 export function profileHtml(s: ShelterState, v: ShelterSurvivor, face: string | null): string {

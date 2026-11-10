@@ -27,7 +27,7 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
   chuva quando `s.raining`.
 - [x] **Incursão no nível do abrigo.** Em `src/game/RaidScene.ts`: variação do piso por tile,
   sombra na base das paredes, luz ao redor do sobrevivente no lugar da névoa chapada.
-- [ ] **Tela do grupo.** Uma visão geral dos personagens: grade de retratos grandes com nome,
+- [x] **Tela do grupo.** Uma visão geral dos personagens: grade de retratos grandes com nome,
   estado e tarefa, abrindo a ficha (`showProfile` em `src/main.ts`) ao clicar. Incluir mortos
   e quem partiu, em tom apagado.
 - [ ] **Câmera no celular.** Em tela estreita o abrigo e o mapa encolhem demais. Aproximar a
