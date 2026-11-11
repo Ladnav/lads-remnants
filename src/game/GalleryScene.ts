@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { RES, sharpText } from './oblique';
 import { RECRUITS, SURVIVORS } from '../data/survivors';
 import { ZOMBIES, type ZombieKind } from '../data/zombies';
-import { Actor, survivorLook, zombieLook, type Facing, type Look } from './sprites';
+import { Actor, preloadBodies, survivorLook, zombieLook, type Facing, type Look } from './sprites';
 
 const FACINGS: Facing[] = ['down', 'right', 'up', 'left'];
 
@@ -10,6 +10,10 @@ const FACINGS: Facing[] = ['down', 'right', 'up', 'left'];
 export class GalleryScene extends Phaser.Scene {
   constructor() {
     super('gallery');
+  }
+
+  preload(): void {
+    preloadBodies(this);
   }
 
   create(): void {

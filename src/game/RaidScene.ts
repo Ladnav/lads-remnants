@@ -4,7 +4,7 @@ import { computeVisible, exitStatus } from '../sim/raid/raid';
 import type { RaidState, Tile, Vec } from '../sim/raid/types';
 import { NightLight, type LightSource } from './night';
 import { RES, TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, shade, wall } from './oblique';
-import { Actor, survivorLook, zombieLook } from './sprites';
+import { Actor, preloadBodies, survivorLook, zombieLook } from './sprites';
 
 export { TILE } from './oblique';
 
@@ -33,6 +33,10 @@ export class RaidScene extends Phaser.Scene {
   constructor(onReady: () => void) {
     super('raid');
     this.onReady = onReady;
+  }
+
+  preload(): void {
+    preloadBodies(this);
   }
 
   create(): void {

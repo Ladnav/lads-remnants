@@ -5,7 +5,7 @@ import { TILE, WALL_H, box, enablePan, feet, rowDepth, setupObliqueCamera, wall 
 import { artUrl } from './art';
 import { ensureIcon, iconFor } from './icons';
 import { NightLight, makeRain, type LightSource } from './night';
-import { Actor, survivorLook, type Pose } from './sprites';
+import { Actor, preloadBodies, survivorLook, type Pose } from './sprites';
 
 const W = 28;
 const H = 20;
@@ -177,6 +177,7 @@ export class ShelterScene extends Phaser.Scene {
   }
 
   preload(): void {
+    preloadBodies(this);
     if (!this.textures.exists('shelter-bg')) this.load.image('shelter-bg', artUrl('shelter'));
     for (const key of PROPS) if (!this.textures.exists(key)) this.load.image(key, artUrl(key));
   }

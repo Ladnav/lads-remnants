@@ -6,7 +6,7 @@ import { artUrl } from './art';
 import { ensureIcon, iconFor } from './icons';
 import { NightLight, makeRain, type LightSource } from './night';
 import { TAP_SLOP, TILE, WALL_H, enablePan, setupObliqueCamera } from './oblique';
-import { Actor, survivorLook } from './sprites';
+import { Actor, preloadBodies, survivorLook } from './sprites';
 
 const W = 28;
 const H = 20;
@@ -51,6 +51,7 @@ export class RegionScene extends Phaser.Scene {
   }
 
   preload(): void {
+    preloadBodies(this);
     if (!this.textures.exists('region-map')) this.load.image('region-map', artUrl('region-map'));
     for (const id of [...PLACES, 'title']) if (!this.textures.exists(`place-${id}`)) this.load.image(`place-${id}`, artUrl(id));
   }

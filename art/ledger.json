@@ -356,6 +356,204 @@
       "textTokens": 342,
       "imageTokens": 2000,
       "usd": 0.2448
+    },
+    {
+      "at": "2026-11-11T12:16:24.846Z",
+      "job": "body-marta-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 502,
+      "textTokens": 406,
+      "imageTokens": 1120,
+      "usd": 0.1403
+    },
+    {
+      "at": "2026-11-11T12:16:40.625Z",
+      "job": "body-iuri-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 499,
+      "textTokens": 401,
+      "imageTokens": 1120,
+      "usd": 0.1402
+    },
+    {
+      "at": "2026-11-11T12:16:55.919Z",
+      "job": "body-zombie-walker-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 221,
+      "textTokens": 522,
+      "imageTokens": 1120,
+      "usd": 0.1411
+    },
+    {
+      "at": "2026-11-11T12:17:31.478Z",
+      "job": "body-lena-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 495,
+      "textTokens": 177,
+      "imageTokens": 1120,
+      "usd": 0.1375
+    },
+    {
+      "at": "2026-11-11T12:17:46.950Z",
+      "job": "body-bruno-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 493,
+      "textTokens": 363,
+      "imageTokens": 1120,
+      "usd": 0.1397
+    },
+    {
+      "at": "2026-11-11T12:18:04.531Z",
+      "job": "body-ana-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 497,
+      "textTokens": 182,
+      "imageTokens": 1120,
+      "usd": 0.1376
+    },
+    {
+      "at": "2026-11-11T12:18:21.755Z",
+      "job": "body-caio-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 489,
+      "textTokens": 184,
+      "imageTokens": 1120,
+      "usd": 0.1376
+    },
+    {
+      "at": "2026-11-11T12:18:38.453Z",
+      "job": "body-dona_rita-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 496,
+      "textTokens": 437,
+      "imageTokens": 1120,
+      "usd": 0.1406
+    },
+    {
+      "at": "2026-11-11T12:18:53.806Z",
+      "job": "body-teo-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 495,
+      "textTokens": 421,
+      "imageTokens": 1120,
+      "usd": 0.1404
+    },
+    {
+      "at": "2026-11-11T12:19:08.629Z",
+      "job": "body-zombie-runner-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 220,
+      "textTokens": 411,
+      "imageTokens": 1120,
+      "usd": 0.1398
+    },
+    {
+      "at": "2026-11-11T12:19:27.171Z",
+      "job": "body-zombie-brute-front",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 213,
+      "textTokens": 483,
+      "imageTokens": 1120,
+      "usd": 0.1406
+    },
+    {
+      "at": "2026-11-11T12:19:44.594Z",
+      "job": "body-marta-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 505,
+      "textTokens": 363,
+      "imageTokens": 1120,
+      "usd": 0.1398
+    },
+    {
+      "at": "2026-11-11T12:19:59.529Z",
+      "job": "body-iuri-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 502,
+      "textTokens": 383,
+      "imageTokens": 1120,
+      "usd": 0.14
+    },
+    {
+      "at": "2026-11-11T12:20:14.938Z",
+      "job": "body-lena-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 498,
+      "textTokens": 388,
+      "imageTokens": 1120,
+      "usd": 0.1401
+    },
+    {
+      "at": "2026-11-11T12:20:31.610Z",
+      "job": "body-bruno-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 496,
+      "textTokens": 401,
+      "imageTokens": 1120,
+      "usd": 0.1402
+    },
+    {
+      "at": "2026-11-11T12:20:50.699Z",
+      "job": "body-ana-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 500,
+      "textTokens": 389,
+      "imageTokens": 1120,
+      "usd": 0.1401
+    },
+    {
+      "at": "2026-11-11T12:21:07.093Z",
+      "job": "body-caio-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 492,
+      "textTokens": 431,
+      "imageTokens": 1120,
+      "usd": 0.1406
+    },
+    {
+      "at": "2026-11-11T12:21:22.444Z",
+      "job": "body-dona_rita-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 499,
+      "textTokens": 363,
+      "imageTokens": 1120,
+      "usd": 0.1398
+    },
+    {
+      "at": "2026-11-11T12:21:39.429Z",
+      "job": "body-teo-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 498,
+      "textTokens": 440,
+      "imageTokens": 1120,
+      "usd": 0.1407
+    },
+    {
+      "at": "2026-11-11T12:21:55.530Z",
+      "job": "body-zombie-walker-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 224,
+      "textTokens": 465,
+      "imageTokens": 1120,
+      "usd": 0.1404
+    },
+    {
+      "at": "2026-11-11T12:22:09.746Z",
+      "job": "body-zombie-runner-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 223,
+      "textTokens": 497,
+      "imageTokens": 1120,
+      "usd": 0.1408
+    },
+    {
+      "at": "2026-11-11T12:22:24.004Z",
+      "job": "body-zombie-brute-back",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 216,
+      "textTokens": 389,
+      "imageTokens": 1120,
+      "usd": 0.1395
     }
   ]
 }

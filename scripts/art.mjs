@@ -83,6 +83,38 @@ const texture = (id, what) => ({ id, aspect: '1:1', width: 768, shelved: true, p
 const PROP = `Single isolated game prop, gritty realistic digital painting with dry-brush and charcoal grain, muted desaturated palette, worn, dirty, improvised from scavenged materials. Orthographic three-quarter top-down view: the camera looks down at about 55 degrees, so both the top surface and the front side of the object are visible, front side facing the bottom of the image, no perspective distortion. The whole object is visible and centered with a margin around it. Soft even overcast lighting from above. Background: one flat uniform pure magenta colour (#FF00FF) filling everything, no floor, no ground shadow, no gradient, no text.`;
 const prop = (id, width, what) => ({ id, aspect: '1:1', width, key: true, shelved: true, prompt: `${what} ${PROP}` });
 
+/**
+ * Personagem de corpo inteiro para andar pelo cenário, no ângulo do jogo, recortado do fundo.
+ * `view` 'front' olha para baixo e para a direita; 'back' anda para cima, de costas.
+ * O retrato do próprio personagem vai junto, para o rosto e a roupa baterem.
+ */
+const BODY = `Single isolated full-body game character sprite for a top-down survival game, gritty realistic digital painting with dry-brush and charcoal grain, muted desaturated palette, dirty worn clothes. Camera: high three-quarter view from above and in front, looking down at about 50 degrees, like the camera of a top-down RPG, so the top of the head and shoulders are clearly visible and the body is slightly foreshortened. The WHOLE body is visible from the top of the head to the shoes, standing upright, centered, with a margin around it, feet at the bottom. Soft even overcast light from above. Background: one flat uniform pure magenta colour (#FF00FF) filling everything, no floor, no shadow on the ground, no gradient, no text, no border.`;
+const POSES = {
+  front: 'Facing toward the camera and slightly to the right of the image, in a calm walking pose.',
+  back: 'Seen from behind, walking away from the camera toward the top of the image; the face is not visible.',
+};
+const body = (id, view, who, ref) => ({
+  id: `body-${id}-${view}`,
+  aspect: '2:3',
+  height: 360,
+  key: true,
+  refs: ref ? [ref] : [],
+  prompt: `${ref ? 'The attached portrait shows this exact character: keep the same face, hair, skin tone, build and clothes. ' : ''}${who}. ${POSES[view]} ${BODY}`,
+});
+const people = (view) => [
+  body('marta', view, 'Marta, a lean Brazilian woman around 40, former electrician, dark hair tied back, mustard-yellow work shirt, dark blue work trousers, boots, a tool pouch on her belt', 'art/raw/marta.jpg'),
+  body('iuri', view, 'Iuri, a big broad-shouldered Brazilian man around 35, former security guard, short black hair, stubble, faded blue shirt, dark trousers, boots', 'art/raw/iuri.jpg'),
+  body('lena', view, 'Lena, a slight Brazilian woman around 22, nursing student, short messy auburn hair, green hooded jacket, brown trousers, sneakers, small backpack', 'art/raw/lena.jpg'),
+  body('bruno', view, 'Bruno, a heavyset Black Brazilian man around 50, former bus driver, greying short beard, worn grey polo shirt, dark trousers', 'art/raw/bruno.jpg'),
+  body('ana', view, 'Ana, a thin Brazilian woman around 45, former schoolteacher, shoulder-length brown hair with grey strands, cracked glasses, faded olive cardigan, long skirt', 'art/raw/ana.jpg'),
+  body('caio', view, 'Caio, a skinny Brazilian teenage boy of 15, curly black hair, oversized dark hoodie, jeans, worn sneakers', 'art/raw/caio.jpg'),
+  body('dona_rita', view, 'Dona Rita, a small wiry Brazilian woman around 70, white hair in a tight bun, floral blouse under an old knitted vest, long dark skirt', 'art/raw/dona_rita.jpg'),
+  body('teo', view, 'Téo, an athletic Brazilian man around 28, former jiu-jitsu fighter, shaved head, stained white tank top, dark track pants', 'art/raw/teo.jpg'),
+  body('zombie-walker', view, 'A shambling zombie, a dead ordinary man in torn grey-green work clothes, grey-green rotting skin, slack jaw, dark blood stains, arms hanging forward, dragging his feet'),
+  body('zombie-runner', view, 'A fast lean zombie, a dead young man in a torn red t-shirt, pale yellow-green skin, wild eyes, bloody mouth, hunched forward as if lunging'),
+  body('zombie-brute', view, 'A huge hulking zombie, a dead heavy man in a ripped dark blue jacket, swollen dark green skin, massive arms, torn clothes, terrifying'),
+];
+
 const JOBS = [
   {
     // Pintura do abrigo sobre a planta exata do jogo (node scripts/art-ref-shelter.mjs).
@@ -136,6 +168,9 @@ const JOBS = [
   // Cenários em alta resolução: a pintura aprovada, refeita em 4K sem mudar nada de lugar.
   hd('shelter-hd', 'shelter', 'art/raw/shelter.jpg'),
   hd('region-map-hd', 'region-map', 'art/raw/region-map.jpg'),
+  // Personagens pintados (frente e costas)
+  ...people('front'),
+  ...people('back'),
   // Telas
   scene('title', 'Wide establishing shot of an old two-storey house with a walled yard in a ruined Brazilian neighbourhood at night, one window glowing with candlelight, boarded windows, power lines hanging, dead city skyline far behind under a heavy sky. Dark empty space in the upper third of the image.'),
   scene('door', 'View from inside a dark hallway looking at a barricaded front door of an old house; through a gap in the boards, the silhouettes of strangers wait outside in grey daylight. A hand-made barricade of planks and a chair, a lantern on the floor.'),
@@ -185,7 +220,7 @@ const report = () =>
   );
 
 /** Tira o fundo magenta: transparência pela distância de cor, com borda suave e sem franja rosa. */
-async function cutout(src, dest, width) {
+async function cutout(src, dest, width, height) {
   const { data, info } = await sharp(src).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const px = (x, y) => (y * info.width + x) * 4;
   // A cor do fundo vem dos quatro cantos, já que o modelo nunca acerta o magenta exato.
@@ -208,7 +243,7 @@ async function cutout(src, dest, width) {
     }
     data[i + 3] = Math.round(a * 255);
   }
-  await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).trim({ threshold: 1 }).resize({ width }).webp({ quality: 88, alphaQuality: 90 }).toFile(dest);
+  await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).trim({ threshold: 1 }).resize(height ? { height } : { width }).webp({ quality: 88, alphaQuality: 90 }).toFile(dest);
 }
 
 if (args.includes('--cost')) {
@@ -236,7 +271,7 @@ for (const job of jobs) {
     }
   }
   if (existsSync(raw(job.id)) && !SUPERSEDED.has(job.id)) {
-    if (job.key) await cutout(raw(job.id), light(job.id), job.width);
+    if (job.key) await cutout(raw(job.id), light(job.id), job.width, job.height);
     else await sharp(raw(job.id)).resize({ width: job.width }).webp({ quality: 82 }).toFile(light(job.as ?? job.id));
     if (job.large) await sharp(raw(job.id)).resize({ width: job.large }).webp({ quality: 84 }).toFile(light(`${job.id}-lg`));
   }

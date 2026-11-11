@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { ZombieKind } from '../data/zombies';
+import { artUrl } from './art';
 import { shade } from './oblique';
 
 /**
@@ -29,6 +30,8 @@ type Build = 'normal' | 'slim' | 'big';
 
 export interface Look {
   key: string;
+  /** Nome do personagem pintado (npm run art), se houver: `body-<paint>-front/back`. */
+  paint?: string;
   shirt: number;
   pants: number;
   skin: number;
@@ -55,11 +58,12 @@ const FIXED: Record<string, Omit<Look, 'key'>> = {
 
 export function survivorLook(id: string): Look {
   const fixed = FIXED[id];
-  if (fixed) return { key: `chr-${id}`, ...fixed };
+  if (fixed) return { key: `chr-${id}`, paint: PAINTED.includes(id) ? id : undefined, ...fixed };
   let h = 7;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return {
     key: `chr-${id}`,
+    paint: PAINTED.includes(id) ? id : undefined,
     shirt: SHIRTS[h % SHIRTS.length],
     pants: PANTS[(h >> 3) % PANTS.length],
     skin: SKINS[(h >> 5) % SKINS.length],
@@ -75,7 +79,24 @@ const ZOMBIE_LOOKS: Record<ZombieKind, Omit<Look, 'key'>> = {
   brute: { shirt: 0x343a4a, pants: 0x26262c, skin: 0x5f7a4a, hair: 0x2a2a20, hairStyle: 'bald', build: 'big', zombie: true },
 };
 
-export const zombieLook = (kind: ZombieKind): Look => ({ key: `zmb-${kind}`, ...ZOMBIE_LOOKS[kind] });
+export const zombieLook = (kind: ZombieKind): Look => ({ key: `zmb-${kind}`, paint: `zombie-${kind}`, ...ZOMBIE_LOOKS[kind] });
+
+/** Quem tem versão pintada. Os demais (e qualquer um, se a imagem não carregar) usam o desenho por código. */
+const PAINTED = ['marta', 'iuri', 'lena', 'bruno', 'ana', 'caio', 'dona_rita', 'teo'];
+const PAINTED_ALL = [...PAINTED, 'zombie-walker', 'zombie-runner', 'zombie-brute'];
+
+/** Carrega os personagens pintados. Chame no preload() de cada cena que tem gente. */
+export function preloadBodies(scene: Phaser.Scene): void {
+  for (const id of PAINTED_ALL) {
+    for (const v of ['front', 'back']) {
+      const key = `body-${id}-${v}`;
+      if (!scene.textures.exists(key)) scene.load.image(key, artUrl(key));
+    }
+  }
+}
+
+/** Altura do personagem pintado na tela, em pixels lógicos. */
+const BODY_H = { normal: 46, slim: 45, big: 51 } as const;
 
 type View = 'down' | 'up' | 'side';
 type Paint = number | CanvasGradient;
@@ -316,11 +337,26 @@ export class Actor {
   private view: View = 'down';
   private walking = false;
   private pose: Pose = 'stand';
+  /** Personagem pintado: duas imagens (frente e costas) animadas por balanço, sem quadros. */
+  private painted: { front: string; back: string; scale: number } | null = null;
+  private bob: Phaser.Tweens.Tween | null = null;
+  private scene: Phaser.Scene;
 
   constructor(scene: Phaser.Scene, look: Look) {
+    this.scene = scene;
     this.key = ensureLook(scene, look);
     this.shadow = scene.add.ellipse(0, 0, look.build === 'big' ? 22 : 18, 6, 0x000000, 0.35);
-    this.sprite = scene.add.sprite(0, PX, this.key, 'down0').setOrigin(0.5, 1).setScale(1 / SS);
+    const front = `body-${look.paint}-front`;
+    const back = `body-${look.paint}-back`;
+    if (look.paint && scene.textures.exists(front) && scene.textures.exists(back)) {
+      const h = scene.textures.get(front).getSourceImage().height;
+      this.painted = { front, back, scale: BODY_H[look.build] / h };
+      this.sprite = scene.add.sprite(0, 1, front).setOrigin(0.5, 1).setScale(this.painted.scale);
+      // Contorno escuro fino: destaca o personagem do chão pintado, como o contorno dos bonecos antigos.
+      this.sprite.preFX?.addGlow(0x0b0a08, 3, 0, false, 0.1, 6);
+    } else {
+      this.sprite = scene.add.sprite(0, PX, this.key, 'down0').setOrigin(0.5, 1).setScale(1 / SS);
+    }
     this.container = scene.add.container(0, 0, [this.shadow, this.sprite]);
   }
 
@@ -348,14 +384,42 @@ export class Actor {
   setPose(pose: Pose): void {
     if (pose === this.pose) return;
     this.pose = pose;
-    this.sprite.setCrop().setAngle(0).setPosition(0, PX);
+    this.stopBob();
+    this.sprite.setCrop().setAngle(0).setPosition(0, this.painted ? 1 : PX);
     this.shadow.setVisible(pose === 'stand');
-    if (pose === 'bed') this.sprite.setCrop(0, 0, FRAME_W * SS, 20 * SS);
-    if (pose === 'floor') this.sprite.setAngle(-90).setPosition(FRAME_H / 2 - 4, 0);
+    if (this.painted) {
+      const src = this.scene.textures.get(this.painted.front).getSourceImage();
+      // Na cama só a cabeça e os ombros ficam fora do cobertor.
+      if (pose === 'bed') this.sprite.setTexture(this.painted.front).setCrop(0, 0, src.width, src.height * 0.3);
+      if (pose === 'floor') this.sprite.setTexture(this.painted.front).setAngle(-90).setPosition(BODY_H.normal / 2 - 4, 0);
+    } else {
+      if (pose === 'bed') this.sprite.setCrop(0, 0, FRAME_W * SS, 20 * SS);
+      if (pose === 'floor') this.sprite.setAngle(-90).setPosition(FRAME_H / 2 - 4, 0);
+    }
     this.refresh();
   }
 
+  private stopBob(): void {
+    this.bob?.stop();
+    this.bob = null;
+  }
+
   private refresh(): void {
+    if (this.painted) {
+      if (this.pose !== 'stand') {
+        this.sprite.setFlipX(false);
+        return;
+      }
+      this.sprite.setTexture(this.view === 'up' ? this.painted.back : this.painted.front);
+      if (this.walking && !this.bob) {
+        // Passo: sobe e desce e balança de leve, no ritmo de quem anda cansado.
+        this.bob = this.scene.tweens.add({ targets: this.sprite, y: -0.6, angle: { from: -2.2, to: 2.2 }, duration: 210, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      } else if (!this.walking && this.bob) {
+        this.stopBob();
+        this.sprite.setPosition(0, 1).setAngle(0);
+      }
+      return;
+    }
     if (this.pose !== 'stand') {
       this.sprite.anims.stop();
       this.sprite.setFlipX(false).setFrame('sleep');
