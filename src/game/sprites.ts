@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { ZombieKind } from '../data/zombies';
 import { artUrl } from './art';
+import { softShadow } from './night';
 import { shade } from './oblique';
 
 /**
@@ -332,7 +333,7 @@ export type Pose = 'stand' | 'bed' | 'floor';
 export class Actor {
   readonly container: Phaser.GameObjects.Container;
   private sprite: Phaser.GameObjects.Sprite;
-  private shadow: Phaser.GameObjects.Ellipse;
+  private shadow: Phaser.GameObjects.Image;
   private key: string;
   private view: View = 'down';
   private walking = false;
@@ -345,7 +346,7 @@ export class Actor {
   constructor(scene: Phaser.Scene, look: Look) {
     this.scene = scene;
     this.key = ensureLook(scene, look);
-    this.shadow = scene.add.ellipse(0, 0, look.build === 'big' ? 22 : 18, 6, 0x000000, 0.35);
+    this.shadow = scene.add.image(0, -1, softShadow(scene)).setDisplaySize(look.build === 'big' ? 26 : 21, 8).setAlpha(0.55);
     const front = `body-${look.paint}-front`;
     const back = `body-${look.paint}-back`;
     if (look.paint && scene.textures.exists(front) && scene.textures.exists(back)) {

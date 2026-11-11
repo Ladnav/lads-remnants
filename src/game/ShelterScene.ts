@@ -4,7 +4,7 @@ import type { ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 import { TILE, WALL_H, box, enablePan, feet, rowDepth, setupObliqueCamera, wall } from './oblique';
 import { artUrl } from './art';
 import { ensureIcon, iconFor } from './icons';
-import { NightLight, makeRain, type LightSource } from './night';
+import { NightLight, makeRain, softShadow, type LightSource, type OpenArea } from './night';
 import { Actor, preloadBodies, survivorLook, type Pose } from './sprites';
 
 const W = 28;
@@ -203,6 +203,25 @@ export class ShelterScene extends Phaser.Scene {
     this.time.addEvent({ delay: 170, loop: true, callback: () => this.night.flicker() });
     // Chuva no quintal, a única parte da casa sem telhado.
     this.rain = makeRain(this, 19 * TILE, 8 * TILE, 27 * TILE, 18 * TILE);
+    // Poeira flutuando dentro de casa: quase invisível, mas tira a sensação de quadro parado.
+    if (!this.textures.exists('mote')) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(0xf3dcb0).fillCircle(2, 2, 2);
+      g.generateTexture('mote', 4, 4);
+      g.destroy();
+    }
+    this.add
+      .particles(0, 0, 'mote', {
+        x: { min: TILE, max: 18 * TILE },
+        y: { min: TILE, max: 18 * TILE },
+        lifespan: 7000,
+        speedX: { min: -3, max: 3 },
+        speedY: { min: -4, max: 1 },
+        scale: { min: 0.15, max: 0.4 },
+        alpha: { values: [0, 0.35, 0] },
+        frequency: 260,
+      })
+      .setDepth(90000);
     this.onReady();
   }
 
@@ -215,7 +234,11 @@ export class ShelterScene extends Phaser.Scene {
     this.drawHouse(s);
     this.drawPeople(s);
     const h = hourOfDay(s.hour);
-    this.night.set(isNight(h) ? 0.68 : h === 20 || h === 6 ? 0.38 : 0, this.lightSources(s));
+    // De dia a casa é mais escura que o quintal, que não tem telhado; à noite o quintal tem só a lua.
+    const dusk = h === 20 || h === 6;
+    const yard: OpenArea = { x: 19 * TILE, y: 9 * TILE, w: 8 * TILE, h: 10 * TILE, amount: isNight(h) ? 0.3 : dusk ? 0.55 : 0.9 };
+    const day = !isNight(h) && !dusk;
+    this.night.set(isNight(h) ? 0.68 : dusk ? 0.45 : 0.3, day ? this.lightSources(s).filter((l) => l.fire) : this.lightSources(s), [yard]);
     if (this.rain.emitting !== s.raining) s.raining ? this.rain.start() : this.rain.stop();
   }
 
@@ -261,7 +284,15 @@ export class ShelterScene extends Phaser.Scene {
     const img = this.add.image(cx, baseY, key).setOrigin(0.5, 1).setDepth(rowDepth(row, 6)).setTint(0xcbc4b8);
     img.setScale((widthTiles * TILE) / img.width);
     this.decor.push(img);
-    this.floor.fillStyle(0x000000, 0.4).fillEllipse(cx + 2, baseY - 2, widthTiles * TILE, Math.max(8, widthTiles * TILE * 0.32));
+    // Sombra de contato debaixo do objeto, não abaixo dele: a mancha ocupa a "pegada" no chão,
+    // que na vista de cima é a metade de baixo da imagem. Uma faixa mais escura cola a base.
+    const w = widthTiles * TILE;
+    const footprint = Math.min(img.displayHeight * 0.55, w * 0.6);
+    const shadow = softShadow(this);
+    this.decor.push(
+      this.add.image(cx + 1, baseY - footprint * 0.45, shadow).setDisplaySize(w * 1.12, footprint * 1.1).setAlpha(0.6).setDepth(2),
+      this.add.image(cx, baseY - 2, shadow).setDisplaySize(w * 0.85, 6).setAlpha(0.55).setDepth(2),
+    );
     return img;
   }
 
@@ -428,9 +459,10 @@ export class ShelterScene extends Phaser.Scene {
 
   /** Onde há luz à noite: fogão aceso, rádio, bancada, e um lampião na sala e outro no dormitório. */
   private lightSources(s: ShelterState): LightSource[] {
-    const at = (p: P, r: number): LightSource => ({ x: p[0] * TILE + TILE / 2, y: p[1] * TILE + TILE / 2, r });
+    const at = (p: P, r: number, fire = false): LightSource => ({ x: p[0] * TILE + TILE / 2, y: p[1] * TILE + TILE / 2, r, fire });
     const out = [at([8, 11], 150), at([5, 5], 95)];
-    if (s.buildings.stove) out.push(at(STATIONS.stove, 130));
+    // O fogão aceso ilumina a cozinha até de dia.
+    if (s.buildings.stove) out.push(at(STATIONS.stove, 130, true));
     if (s.buildings.radio) out.push(at(STATIONS.radio, 80));
     if (s.buildings.workbench) out.push(at(STATIONS.workbench, 70));
     return out;
