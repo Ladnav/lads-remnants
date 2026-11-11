@@ -37,6 +37,13 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
 - [x] **README e capturas.** Atualizar `README.md` com a repaginação, a ficha, `npm run art` e
   o registro de custo; refazer as capturas antigas em `docs/screenshots/`.
 
+## Revisão de 11/11 (em andamento)
+- [x] **Primeiros minutos:** tutorial guiado e primeira visita garantida.
+- [x] **Métricas mínimas:** `play_events` e `npm run metrics`.
+- [ ] **Playtest:** o dono por uma semana, depois 3 a 5 amigos. Ajustar a dificuldade depois.
+- [ ] **Mais decisões e conteúdo:** eventos com consequência, mais visitantes, um ou dois locais, algo que passe de uma partida para a outra.
+- [ ] **Unificar o visual:** personagens no tom das pinturas; incursão mais próxima do abrigo.
+
 ## Dependem do dono do projeto (não fazer sem ele)
 - [x] **Publicação.** No ar em https://ladnav.github.io/lads-remnants/ (`npm run deploy:pages`), instalável como PWA, com `ALLOW_DEV_TOOLS` desligado.
 - [ ] **Notificações (Fase 4b).** Código pronto e testado; falta publicar no servidor (passos no README, "Publicar os avisos no servidor") e testar um aviso de verdade num celular.

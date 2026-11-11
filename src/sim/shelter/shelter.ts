@@ -94,6 +94,7 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
     bonds: { 'iuri|marta': 20 },
     signal: 0,
     ended: null,
+    visits: 0,
   };
   log(s, 'Dia 1. Uma casa de dois andares com muro alto. Três pessoas, pouca água, nenhum plano.');
   log(s, 'Comece pela bancada: sem ela, quase nada se constrói.');
@@ -112,6 +113,8 @@ export function migrate(s: ShelterState): ShelterState {
   s.bonds ??= {};
   s.signal ??= 0;
   s.ended ??= null;
+  // Saves antigos já passaram do começo: contam como se a primeira visita já tivesse vindo.
+  s.visits ??= 1;
   s.buildings.radio ??= 0;
   for (const v of s.survivors) v.raidDay ??= 0;
   for (const e of s.expeditions) {

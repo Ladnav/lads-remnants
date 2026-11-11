@@ -131,6 +131,8 @@ export interface ShelterState {
   signal: number;
   /** O grupo saiu da cidade: fim da história, com quem chegou ao barco. */
   ended: { hour: number; saved: string[] } | null;
+  /** Quantas visitas já bateram na porta. A primeira vem cedo, para o começo não ficar parado. */
+  visits: number;
 }
 
 export interface RaidTicket {

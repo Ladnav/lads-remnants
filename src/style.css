@@ -1156,3 +1156,42 @@ button.primary {
 #mute:hover {
   opacity: 1;
 }
+
+/* ---------- Tutorial ---------- */
+.card.tutorial {
+  border-color: var(--accent);
+}
+
+.tstep {
+  font-size: 13px;
+  padding: 3px 0;
+  color: var(--muted);
+}
+
+.tstep.done {
+  color: var(--good);
+}
+
+.tstep.now {
+  color: var(--text);
+  padding: 6px 0 6px 8px;
+  margin: 2px 0;
+  border-left: 2px solid var(--accent);
+}
+
+.tstep.now .small {
+  margin-top: 3px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+button.linkish {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-height: 0;
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: underline;
+}

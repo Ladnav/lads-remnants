@@ -4,12 +4,27 @@ import { chance, nextRandom, pick, randInt } from '../rng';
 import { addResources, aliveSurvivors, changeMood, log } from './core';
 import type { Dilemma, ShelterState, VisitorKind } from './types';
 
+/** Mesma hora de início de shelter.ts (repetida aqui para não criar import circular). */
+const START_HOUR = 8;
+
 const VISIT_HOURS = 6;
 const TRADE_WANTS: readonly ResourceId[] = ['scrap', 'wood', 'parts', 'food', 'water', 'fuel', 'ammo'];
 const TRADE_GIVES: readonly ResourceId[] = ['meds', 'bandages', 'water', 'food', 'parts', 'components', 'ammo', 'wood'];
 
+/** Horas de jogo depois do começo até a primeira visita (2h de jogo = 1h real). */
+export const FIRST_VISIT_AFTER = 2;
+
 /** Durante o dia, às vezes alguém bate na porta. */
 export function maybeSpawnVisitor(s: ShelterState, h: number): void {
+  // A primeira visita é certa e cedo: a primeira decisão difícil vem na primeira sessão.
+  if (s.visits === 0) {
+    if (s.hour < START_HOUR + FIRST_VISIT_AFTER || s.dilemmas.length > 0) return;
+    const first = buildDilemma(s, 'beggar')!;
+    s.dilemmas.push(first);
+    s.visits++;
+    log(s, `Batem na porta: ${first.title.toLowerCase()}.`, 'warn');
+    return;
+  }
   // Em modo de espera ninguém bate na porta: dilemas sem resposta só puniriam a ausência.
   if (h < 9 || h > 18 || s.dilemmas.length > 0 || s.hour - s.lastSeenHour >= 48 || !chance(s, 0.07)) return;
   const kinds: VisitorKind[] = ['beggar', 'trader', 'trader', 'conman', 'bandits'];
@@ -19,6 +34,7 @@ export function maybeSpawnVisitor(s: ShelterState, h: number): void {
   const d = buildDilemma(s, kind);
   if (d) {
     s.dilemmas.push(d);
+    s.visits++;
     log(s, `Batem na porta: ${d.title.toLowerCase()}.`, 'warn');
   }
 }

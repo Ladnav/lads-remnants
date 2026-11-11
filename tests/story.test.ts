@@ -114,3 +114,25 @@ describe('objetivo: sair da cidade', () => {
     expect(s.buildings.radio).toBe(0);
   });
 });
+
+describe('primeira hora', () => {
+  it('a primeira visita bate na porta cedo, sem depender de sorte', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const s = createShelter(seed, 0);
+      s.resources.food = 99;
+      s.resources.water = 99;
+      tickHour(s);
+      tickHour(s);
+      expect(s.dilemmas).toHaveLength(1);
+      expect(s.visits).toBe(1);
+      expect(s.dilemmas[0].kind).toBe('beggar');
+    }
+  });
+
+  it('saves antigos não ganham uma visita extra', () => {
+    const s = createShelter(9, 0) as Partial<ShelterState> & ShelterState;
+    delete (s as Partial<ShelterState>).visits;
+    migrate(s);
+    expect(s.visits).toBe(1);
+  });
+});

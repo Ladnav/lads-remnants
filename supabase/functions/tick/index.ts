@@ -4,7 +4,7 @@
 // importante aconteceu enquanto ele estava fora.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import * as webpush from 'jsr:@negrel/webpush@0.5';
-import { tickShelter } from '../game/_game.js';
+import { isFinished, tickShelter } from '../game/_game.js';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -58,6 +58,9 @@ Deno.serve(async () => {
       .select('version');
     if (!updated?.length) continue;
     out.advanced++;
+    if (isFinished(state) && !isFinished(row.state)) {
+      await admin.from('play_events').insert({ user_id: userId, kind: state.ended ? 'evacuated' : 'game_over', day: Math.floor(state.hour / 24) + 1, alive: 0, data: { offline: true } });
+    }
     if (!notice) continue;
     // deno-lint-ignore no-explicit-any
     let app: any;

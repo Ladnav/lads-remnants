@@ -7,7 +7,7 @@ import type { Account, PushState } from '../net/backend';
 import type { ShelterCommand } from '../server/game';
 import { FRIEND, RIVAL, aliveSurvivors, bondOf, canAfford, dayOf, describeCost, emotionOf, friendsOf, hourOfDay, isNight, rivalsOf } from '../sim/shelter/core';
 import { pendingEmergencies } from '../sim/shelter/expeditions';
-import { SIGNAL_HOURS, evacuationNeeds, goalStage, hasUndiscovered, workEfficiency } from '../sim/shelter/shelter';
+import { SIGNAL_HOURS, evacuationNeeds, goalStage, hasUndiscovered, workEfficiency, isFinished } from '../sim/shelter/shelter';
 import type { DiaryEntry, Emotion, ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 
 export type View = 'shelter' | 'map';
@@ -44,7 +44,8 @@ type Cmd =
   | { cmd: 'evacuate' }
   | { cmd: 'skip'; hours: number }
   | { cmd: 'link' }
-  | { cmd: 'push' };
+  | { cmd: 'push' }
+  | { cmd: 'skipTutorial' };
 
 export interface ShelterUiHooks {
   changed: () => void;
@@ -91,6 +92,7 @@ export class ShelterUi {
   private loadout = { weapon: false, bandages: 0 };
   private error = '';
   private pushNote = '';
+  private tutorial = loadTutorial();
   private notice = '';
 
   constructor(
@@ -172,6 +174,11 @@ export class ShelterUi {
       case 'takeOver': this.hooks.takeOver(c.expId); return;
       case 'profile': this.hooks.profile(c.id); return;
       case 'group': this.hooks.group(); return;
+      case 'skipTutorial':
+        this.tutorial.skip = true;
+        saveTutorial(this.tutorial);
+        this.hooks.changed();
+        return;
       case 'push':
         this.pushNote = 'Pedindo permissão…';
         this.hooks.changed();
@@ -262,12 +269,13 @@ export class ShelterUi {
   private tabs(s: ShelterState): string {
     const alerts = pendingEmergencies(s).length;
     const def = s.project ? RECIPES[s.project.recipe] : null;
+    const hint = this.tutorialTab(s);
     const tab = (id: Tab, icon: string, label: string, badge = '') =>
       `<button class="tab ${this.tab === id ? 'active' : ''}" data-cmd='${JSON.stringify({ cmd: 'tab', tab: id })}'><span class="tab-icon">${icon}</span><span class="tab-label">${label}</span>${badge ? `<span class="tab-badge">${badge}</span>` : ''}</button>`;
     return (
       tab('home', '🏠', 'Abrigo', s.dilemmas.length ? '🚪' : '') +
-      tab('bench', '🔨', 'Bancada', def ? `${Math.floor((s.project!.progress / def.hours) * 100)}%` : '') +
-      tab('map', '🗺️', 'Mapa', alerts ? '🚨' : '') +
+      tab('bench', '🔨', 'Bancada', def ? `${Math.floor((s.project!.progress / def.hours) * 100)}%` : hint === 'bench' && this.tab !== 'bench' ? '●' : '') +
+      tab('map', '🗺️', 'Mapa', alerts ? '🚨' : hint === 'map' && this.tab !== 'map' ? '●' : '') +
       tab('log', '📖', 'Diário')
     );
   }
@@ -345,6 +353,7 @@ export class ShelterUi {
     const short = alive.length && (s.resources.food < alive.length || s.resources.water < alive.length);
 
     return `
+      ${this.tutorialCard(s)}
       ${this.goalCard(s)}
       <div class="card"><div class="row head"><h3>Sobreviventes</h3>${cmdBtn('👥 Ver o grupo', { cmd: 'group' })}</div>${people}${lost.length ? `<div class="small muted">Perdidos: ${lost.map((v) => `${v.name} (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ')}</div>` : ''}
         <div class="row small ration"><label><input type="checkbox" ${s.rationing ? 'checked' : ''} data-cmd='${JSON.stringify({ cmd: 'ration', on: !s.rationing })}'/> Racionar (meia porção, humor cai)</label>${short ? '<span class="bad">falta comida ou água</span>' : ''}</div>
@@ -406,6 +415,93 @@ export class ShelterUi {
         <div class="small muted" style="margin-top:6px">${builders.length ? `Na tarefa Construir: ${builders.join(', ')}.` : 'Ninguém está na tarefa Construir. Mude a tarefa de alguém na aba Abrigo.'}</div>
       </div>
       <div class="card"><h3>O que dá para fazer</h3><div class="recipes">${recipes}</div></div>`;
+  }
+
+  /** Os passos do tutorial, cada um com o teste de "já fez" tirado do próprio estado. */
+  private steps(s: ShelterState): Step[] {
+    const home = s.survivors.filter((v) => v.status === 'home');
+    const building = s.project?.recipe === 'workbench';
+    const atDoor = s.dilemmas.length > 0;
+    return [
+      {
+        id: 'bench',
+        title: 'Construa a bancada',
+        done: s.buildings.workbench > 0,
+        hint: building
+          ? `Já está em obra. ${home.some((v) => v.task === 'craft') ? 'Quem está na tarefa Construir trabalha nela sozinho, com a aba fechada.' : 'Ponha alguém na tarefa Construir para a obra andar.'}`
+          : 'Na aba Bancada, toque em Construir ao lado de "Bancada". Quem estiver na tarefa Construir faz o trabalho.',
+        go: building ? undefined : 'bench',
+      },
+      {
+        id: 'door',
+        title: 'Atenda quem bater na porta',
+        done: s.visits > 0 && !atDoor,
+        hint: atDoor ? 'Tem alguém na porta agora: decida no cartão laranja acima. Não existe escolha sem custo.' : 'Logo alguém vai aparecer. Cada visita é uma escolha, e o grupo lembra dela.',
+      },
+      {
+        id: 'talk',
+        title: 'Converse com alguém do grupo',
+        done: s.survivors.some((v) => v.talkedDay > 0),
+        hint: 'Toque em Conversar no cartão de um sobrevivente, logo abaixo. Levanta o humor, uma vez por dia por pessoa.',
+      },
+      {
+        id: 'expedition',
+        title: 'Planeje uma expedição noturna',
+        done: s.expeditions.length > 0 || !!s.standing,
+        hint: 'No Mapa, escolha um local, marque quem vai e toque em Enviar esta noite. Eles saem às 21h e voltam às 6h, sem você.',
+        go: 'map',
+      },
+      {
+        id: 'raid',
+        title: 'Entre numa incursão você mesmo',
+        done: s.survivors.some((v) => v.raidDay > 0),
+        hint: 'No Mapa, escolha um local e toque em Entrar. Você joga por turnos: rende mais que a expedição, e só ali aparecem os mapas que revelam lugares novos.',
+        go: 'map',
+      },
+      {
+        id: 'water',
+        title: 'Garanta água limpa',
+        done: s.buildings.rainCollector > 0 || s.buildings.filter > 0,
+        hint: 'Água acaba rápido. Na aba Bancada, construa um coletor de chuva ou um filtro de água.',
+        go: 'bench',
+      },
+    ];
+  }
+
+  /** Primeiros passos: some quando tudo foi feito ou quando o jogador pula. */
+  private tutorialCard(s: ShelterState): string {
+    if (this.tutorial.skip || isFinished(s)) return '';
+    const steps = this.steps(s);
+    // Feito uma vez, fica feito: a expedição que voltou ou a água que acabou não desmarcam o passo.
+    let changed = false;
+    for (const st of steps) {
+      if (st.done && !this.tutorial.done.includes(st.id)) {
+        this.tutorial.done.push(st.id);
+        changed = true;
+      }
+    }
+    if (changed) saveTutorial(this.tutorial);
+    const done = (st: Step) => this.tutorial.done.includes(st.id);
+    if (steps.every(done)) return '';
+    const current = steps.find((st) => !done(st))!;
+    const rows = steps
+      .map((st) => {
+        if (done(st)) return `<div class="tstep done">✔ ${st.title}</div>`;
+        if (st !== current) return `<div class="tstep">· ${st.title}</div>`;
+        return `<div class="tstep now"><strong>▸ ${st.title}</strong>
+          <div class="small">${st.hint}</div>
+          ${st.go ? `<div class="actions" style="margin-top:6px">${cmdBtn(st.go === 'map' ? '🗺️ Abrir o mapa' : '🔨 Abrir a bancada', { cmd: 'tab', tab: st.go }, 'primary')}</div>` : ''}</div>`;
+      })
+      .join('');
+    return `<div class="card tutorial"><div class="row head"><h3>Primeiros passos · ${steps.filter(done).length}/${steps.length}</h3>
+        <button class="linkish" data-cmd='${JSON.stringify({ cmd: 'skipTutorial' })}'>Já sei jogar</button></div>${rows}</div>`;
+  }
+
+  /** Aba para onde o passo atual do tutorial manda, para marcar com um ponto. */
+  private tutorialTab(s: ShelterState): Tab | null {
+    if (this.tutorial.skip || isFinished(s)) return null;
+    const current = this.steps(s).find((st) => !st.done && !this.tutorial.done.includes(st.id));
+    return current?.go ?? null;
   }
 
   /** O objetivo de longo prazo: rádio → transmissão → suprimentos → partir. */
@@ -622,6 +718,39 @@ export function profileHtml(s: ShelterState, v: ShelterSurvivor, face: string | 
         <h3>No diário</h3><div class="log report">${mentions.length ? diaryHtml(mentions) : '<div class="muted">Nada ainda.</div>'}</div>
       </div>
     </div>`;
+}
+
+interface Step {
+  id: string;
+  title: string;
+  done: boolean;
+  hint: string;
+  go?: Tab;
+}
+
+const TUTORIAL_KEY = 'lads-remnants:tutorial';
+interface TutorialProgress {
+  done: string[];
+  skip: boolean;
+}
+
+/** Progresso do tutorial fica neste navegador: é uma conveniência, não parte do jogo. */
+function loadTutorial(): TutorialProgress {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TUTORIAL_KEY) ?? 'null') as TutorialProgress | null;
+    if (raw && Array.isArray(raw.done)) return { done: raw.done, skip: !!raw.skip };
+  } catch {
+    // Sem armazenamento: começa do zero a cada abertura.
+  }
+  return { done: [], skip: false };
+}
+
+function saveTutorial(p: TutorialProgress): void {
+  try {
+    localStorage.setItem(TUTORIAL_KEY, JSON.stringify(p));
+  } catch {
+    // Sem armazenamento: vale só até recarregar.
+  }
 }
 
 export function diaryHtml(entries: DiaryEntry[]): string {

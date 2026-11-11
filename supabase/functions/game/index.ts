@@ -30,6 +30,21 @@ const DEV_TOOLS = Deno.env.get('ALLOW_DEV_TOOLS') === 'true';
 // deno-lint-ignore no-explicit-any
 type State = any;
 
+/** Dia de jogo e quantos seguem vivos, para as métricas. */
+const snapshot = (s: State) => ({
+  day: Math.floor((s?.hour ?? 0) / 24) + 1,
+  alive: (s?.survivors ?? []).filter((v: { status: string }) => v.status === 'home' || v.status === 'away' || v.status === 'raid').length,
+});
+
+/** Registra um acontecimento para as métricas. Nunca derruba a jogada: se falhar, segue. */
+async function track(userId: string, kind: string, s: State, data?: unknown): Promise<void> {
+  try {
+    await admin.from('play_events').insert({ user_id: userId, kind, ...snapshot(s), data: data ?? null });
+  } catch {
+    // Métrica perdida não importa.
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'Use POST.' }, 405);
@@ -108,6 +123,13 @@ Deno.serve(async (req) => {
       if (updErr) return json({ error: 'Falha ao salvar o abrigo.' }, 500);
       if (!updated?.length) continue;
     }
+    // Métricas: abertura do jogo, incursões, fim da história e recomeço.
+    const was = saved ? isFinished(resumeShelter(saved, now, 0)) : false;
+    if (body.action === 'load') await track(user.id, saved ? 'session' : 'first_session', state);
+    if (body.action === 'finishRaid' && value) await track(user.id, 'raid', state, value);
+    if (body.action === 'reset') await track(user.id, 'reset', saved ?? state, { ended: saved?.ended ?? null });
+    if (!was && isFinished(state)) await track(user.id, state.ended ? 'evacuated' : 'game_over', state, { saved: state.ended?.saved ?? null });
+    if (body.action === 'command' && !error && body.cmd?.type && body.cmd.type !== 'seen') await track(user.id, 'cmd', state, { type: body.cmd.type });
     return json({ state, error, value });
   }
   return json({ error: 'O abrigo está ocupado. Tente de novo.' }, 409);
