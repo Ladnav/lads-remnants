@@ -6,7 +6,7 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
 ## Regras para trabalho sem supervisão
 - Um item por sessão. Terminou, parou.
 - Antes de commitar: `npx tsc --noEmit`, `npm test` e `npm run build` precisam passar.
-- Commit local na `main`, mensagem em português. Nunca `git push`, nunca publicar.
+- Commit local na `main`, mensagem em português. `git push` e `npm run deploy:pages` só com o dono do projeto.
 - Não rodar `npm run art` com geração (gasta créditos do Gemini) nem `npm run deploy:edge`.
 - Não mexer em `.env.local`.
 - Direção de arte: tom sombrio e realista. Os cenários do abrigo e do mapa são pinturas feitas
@@ -38,8 +38,7 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
   o registro de custo; refazer as capturas antigas em `docs/screenshots/`.
 
 ## Dependem do dono do projeto (não fazer sem ele)
-- [ ] **Publicação.** (PWA pronto; falta hospedar) Escolher hospedagem, criar repositório remoto, desligar
-  `ALLOW_DEV_TOOLS` no servidor.
+- [x] **Publicação.** No ar em https://ladnav.github.io/lads-remnants/ (`npm run deploy:pages`), instalável como PWA, com `ALLOW_DEV_TOOLS` desligado.
 - [ ] **Notificações (Fase 4b).**
 - [ ] **Ajuste da dificuldade do objetivo**, depois de uma semana de jogo real.
 - [ ] **Social (Fase 5):** rastros, corpos e comércio.

@@ -2,6 +2,8 @@
 
 Idle de sobrevivência num apocalipse zumbi, com incursões táticas por turnos. Visão completa em [docs/vision.md](docs/vision.md).
 
+**Jogar:** https://ladnav.github.io/lads-remnants/ (no celular, dá para instalar pela opção "Adicionar à tela inicial"). Com `?offline` no fim do endereço o abrigo fica salvo só no navegador.
+
 ## Rodar
 ```bash
 npm install
@@ -13,6 +15,7 @@ npm run deploy:edge   # empacota src/server e publica a Edge Function "game"
 npm run smoke:online  # teste ponta a ponta contra o Supabase
 npm run art           # gera a arte que falta pela API do Gemini (gasta créditos)
 npm run art -- --cost # só mostra quanto já foi gasto
+npm run deploy:pages  # faz o build e publica no GitHub Pages (ramo gh-pages)
 ```
 
 | Abrigo | Mapa da região |
@@ -58,7 +61,7 @@ O `.env.local` (fora do git) guarda também a senha do banco e o ref do projeto 
   - O servidor é a autoridade: o cliente só manda comandos e a tabela é só leitura para o jogador.
   - A simulação avança de forma preguiçosa a cada acesso (determinística, sem cron).
   - Incursões com ingresso: a semente vem do servidor e o loot sai da reprodução do log de ações. Fechar a aba no meio conta como fuga ferida.
-  - `ALLOW_DEV_TOOLS=true` (secret da função) libera +1h/+6h. **Desligue antes de playtests com outras pessoas.**
+  - `ALLOW_DEV_TOOLS` (secret da função) libera +1h/+6h no modo online. Está em `false` desde a publicação; para testar, `supabase secrets set ALLOW_DEV_TOOLS=true --project-ref <ref>`.
   - Fica para a Fase 4b: push notifications (PWA) e o cron do tick.
 
 - **Revisão de mecânicas**:
