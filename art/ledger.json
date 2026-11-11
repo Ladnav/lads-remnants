@@ -338,6 +338,24 @@
       "textTokens": 521,
       "imageTokens": 1120,
       "usd": 0.142
+    },
+    {
+      "at": "2026-11-11T02:53:17.643Z",
+      "job": "shelter-hd",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 361,
+      "textTokens": 440,
+      "imageTokens": 2000,
+      "usd": 0.246
+    },
+    {
+      "at": "2026-11-11T02:53:50.474Z",
+      "job": "region-map-hd",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 361,
+      "textTokens": 342,
+      "imageTokens": 2000,
+      "usd": 0.2448
     }
   ]
 }

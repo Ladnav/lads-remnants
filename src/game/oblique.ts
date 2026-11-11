@@ -9,7 +9,7 @@ import Phaser from 'phaser';
 export const TILE = 28;
 export const WALL_H = 14;
 /** O canvas tem RES vezes a resolução lógica: a pintura precisa de pixels para não borrar. */
-export const RES = 2;
+export const RES = 3;
 
 /** Profundidade de uma linha do grid; objetos da mesma linha usam frações dela. */
 export const rowDepth = (row: number, layer = 0): number => 10 + row * 10 + layer;
@@ -53,7 +53,7 @@ export function sharpText(scene: Phaser.Scene): void {
   if (add.sharp) return;
   add.sharp = true;
   const make = add.text.bind(add);
-  add.text = (...args: Parameters<typeof make>) => make(...args).setResolution(RES * 2);
+  add.text = (...args: Parameters<typeof make>) => make(...args).setResolution(RES + 1);
 }
 
 /**

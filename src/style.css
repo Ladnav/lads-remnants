@@ -30,7 +30,7 @@ body {
 /* ---------- Estrutura: jogo à esquerda, painel à direita ---------- */
 #app {
   display: grid;
-  grid-template-columns: minmax(0, 784px) 400px;
+  grid-template-columns: minmax(0, 1120px) 400px;
   gap: 16px;
   padding: 16px;
   justify-content: center;

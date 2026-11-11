@@ -3,16 +3,22 @@ import type { ZombieKind } from '../data/zombies';
 import { shade } from './oblique';
 
 /**
- * Personagens em pixel art, gerados por código (sem arquivos de imagem): cada visual
- * vira uma textura com quadros de frente, costas e lado, parado e andando.
- * A grade lógica é pequena e cada pixel lógico vira PX×PX na tela.
+ * Personagens gerados por código (sem arquivos de imagem): cada visual vira uma textura
+ * com quadros de frente, costas e lado, parado e andando.
+ * O desenho é feito com formas arredondadas (cabeça oval, tronco e membros roliços, com
+ * sombra de um lado) numa grade lógica de 16×20, pintada com SS vezes mais pixels do que
+ * aparece na tela, para ficar nítida de perto.
  */
 const GW = 16;
 const GH = 20;
 const PX = 2;
 const OX = 2;
 const OY = 1;
-const OUTLINE = 0x15120e;
+const OUTLINE = '#15120e';
+/** Pixels de textura por pixel lógico. */
+const SS = 4;
+/** Pixels de textura por unidade da grade. */
+const U = PX * SS;
 
 export const FRAME_W = GW * PX;
 export const FRAME_H = GH * PX;
@@ -71,161 +77,204 @@ const ZOMBIE_LOOKS: Record<ZombieKind, Omit<Look, 'key'>> = {
 
 export const zombieLook = (kind: ZombieKind): Look => ({ key: `zmb-${kind}`, ...ZOMBIE_LOOKS[kind] });
 
-type Grid = (number | null)[];
 type View = 'down' | 'up' | 'side';
+type Paint = number | CanvasGradient;
 
-function drawFrame(L: Look, view: View, step: 0 | 1 | 2, asleep = false): Grid {
-  const grid: Grid = new Array(GW * GH).fill(null);
-  const p = (x: number, y: number, w: number, h: number, color: number) => {
-    for (let j = y; j < y + h; j++) {
-      for (let i = x; i < x + w; i++) {
-        const gx = i + OX;
-        const gy = j + OY;
-        if (gx >= 0 && gy >= 0 && gx < GW && gy < GH) grid[gy * GW + gx] = color;
-      }
-    }
-  };
-  const clear = (x: number, y: number) => (grid[(y + OY) * GW + x + OX] = null);
-  const shirtD = shade(L.shirt, 0.72);
-  const skinD = shade(L.skin, 0.78);
-  const pantsD = shade(L.pants, 0.7);
-  const shoe = L.zombie ? shade(L.pants, 0.6) : 0x1c1814;
+const hex = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
+
+/** Pinta um quadro do personagem. As medidas são em unidades da grade (16×20). */
+function paintFigure(ctx: CanvasRenderingContext2D, L: Look, view: View, step: 0 | 1 | 2, asleep = false): void {
+  const shirtD = shade(L.shirt, 0.66);
+  const skinD = shade(L.skin, 0.76);
+  const pantsD = shade(L.pants, 0.66);
+  const shoe = L.zombie ? shade(L.pants, 0.55) : 0x1c1814;
   const eye = L.zombie ? 0xe0573a : 0x1a1712;
   const grow = L.build === 'big' ? 1 : L.build === 'slim' ? -1 : 0;
 
-  if (view === 'side') {
-    // Pernas: paradas juntas; andando, abertas em tesoura.
-    if (step === 0) {
-      p(4, 13, 4, 4, L.pants);
-      p(4, 17, 5, 1, shoe);
-    } else {
-      const lift = step === 2 ? 1 : 0;
-      p(2, 13, 2, 4 - lift, pantsD);
-      p(2, 17 - lift, 3, 1, shoe);
-      p(4, 13, 4, 1, L.pants);
-      p(7, 13, 2, 4 - (1 - lift), L.pants);
-      p(7, 17 - (1 - lift), 3, 1, shoe);
+  const fill = (c: Paint) => (ctx.fillStyle = typeof c === 'number' ? hex(c) : c);
+  /** Do tom claro (esquerda) ao escuro (direita): a luz vem sempre do mesmo lado. */
+  const grad = (x0: number, x1: number, light: number, dark: number): CanvasGradient => {
+    const g = ctx.createLinearGradient(x0, 0, x1, 0);
+    g.addColorStop(0.25, hex(light));
+    g.addColorStop(1, hex(dark));
+    return g;
+  };
+  const ell = (cx: number, cy: number, rx: number, ry: number, c: Paint, rot = 0) => {
+    fill(c);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  const rr = (x: number, y: number, w: number, h: number, r: number, c: Paint) => {
+    fill(c);
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fill();
+  };
+  /** Braço ou perna: um traço grosso de pontas redondas. */
+  const limb = (x1: number, y1: number, x2: number, y2: number, w: number, c: number) => {
+    ctx.strokeStyle = hex(c);
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  };
+
+  const head = (back: boolean, side: boolean) => {
+    const cx = 6;
+    const cy = 3.7;
+    const rx = 3.5;
+    const ry = 3.3;
+    rr(cx - 1, 6.1, 2, 1.5, 0.5, skinD);
+    // Cabelo comprido cai atrás da cabeça.
+    if (L.hairStyle === 'long') {
+      if (side) rr(cx - 3.9, 2.4, 3.6, 6, 1.6, shade(L.hair, 0.8));
+      else rr(cx - 3.9, 2.4, 7.8, back ? 6.4 : 5.8, 2.2, shade(L.hair, 0.8));
     }
-    // Tronco
-    const sx = grow > 0 ? 2 : 3;
-    const sw = grow > 0 ? 8 : grow < 0 ? 5 : 6;
-    p(sx, 7, sw, 6, L.shirt);
-    p(sx, 12, sw, 1, shirtD);
-    if (L.zombie) {
-      p(6, 8, 6, 2, L.skin);
-      p(11, 8 + (step === 1 ? 1 : 0), 1, 2, skinD);
-      p(4, 10, 2, 1, 0x7a1f1a);
+    ell(cx, cy, rx, ry, grad(cx - rx, cx + rx, L.skin, skinD));
+    if (side) {
+      ell(cx + rx - 0.05, cy + 0.8, 0.6, 0.5, skinD);
     } else {
-      const ax = step === 1 ? 6 : step === 2 ? 4 : 5;
-      p(ax, 8, 2, 3, shirtD);
-      p(ax + (step === 1 ? 1 : step === 2 ? -1 : 0), 11, 2, 1, L.skin);
+      ell(cx - rx + 0.1, cy + 0.4, 0.5, 0.8, skinD);
+      ell(cx + rx - 0.1, cy + 0.4, 0.5, 0.8, skinD);
     }
-    // Cabeça virada para a direita
-    p(2, 1, 8, 6, L.skin);
-    clear(2, 1);
-    clear(9, 1);
-    clear(2, 6);
-    clear(9, 6);
-    p(9, 5, 1, 1, skinD);
-    if (!asleep) p(8, 4, 1, 1, eye);
+    if (!back) {
+      if (side) {
+        if (asleep) limb(cx + 1.4, cy + 0.4, cx + 2.3, cy + 0.4, 0.3, skinD);
+        else ell(cx + 1.9, cy + 0.3, 0.42, 0.52, eye);
+      } else if (asleep) {
+        limb(cx - 2, cy + 0.5, cx - 1, cy + 0.5, 0.3, shade(L.skin, 0.55));
+        limb(cx + 1, cy + 0.5, cx + 2, cy + 0.5, 0.3, shade(L.skin, 0.55));
+      } else {
+        ell(cx - 1.5, cy + 0.4, 0.42, 0.54, eye);
+        ell(cx + 1.5, cy + 0.4, 0.42, 0.54, eye);
+      }
+      if (L.zombie) rr(side ? cx + 0.9 : cx - 1, cy + 1.7, 2, 0.75, 0.3, 0x3a1512);
+      else if (!side) limb(cx - 0.6, cy + 2, cx + 0.6, cy + 2, 0.24, shade(L.skin, 0.58));
+    }
+    // Cabelo ou boné: recortado no formato da cabeça.
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx + 0.3, ry + 0.3, 0, 0, Math.PI * 2);
+    ctx.clip();
     if (L.hairStyle === 'cap') {
-      p(2, 0, 8, 3, L.shirt);
-      p(8, 3, 3, 1, shirtD);
-      clear(2, 0);
+      fill(L.shirt);
+      ctx.fillRect(cx - 5, -1, 10, back ? cy + 0.6 : cy - 0.2);
     } else if (L.hairStyle !== 'bald') {
-      p(3, 0, 6, 1, L.hair);
-      p(2, 1, 7, 2, L.hair);
-      p(2, 3, L.hairStyle === 'long' ? 3 : 2, L.hairStyle === 'long' ? 5 : 2, L.hair);
+      fill(L.hair);
+      if (back) ctx.fillRect(cx - 5, -1, 10, 9);
+      else if (side) ell(cx - 1.3, cy - 1.3, rx + 0.4, ry, L.hair);
+      else ell(cx, cy - 2.4, rx + 0.7, 2.5, L.hair);
+      ctx.globalAlpha = 0.45;
+      ell(cx - 1.2, cy - 2.5, 1.4, 0.5, shade(L.hair, 1.35), -0.3);
+      ctx.globalAlpha = 1;
+    } else if (L.zombie) {
+      ell(cx - 1, cy - 2, 1.2, 0.6, skinD);
     }
-    if (L.zombie) p(7, 6, 2, 1, 0x3a1512);
-    return outline(grid);
+    ctx.restore();
+    // Aba do boné, para fora da cabeça.
+    if (L.hairStyle === 'cap' && !back) {
+      if (side) rr(cx + 0.6, cy - 0.9, 4, 0.85, 0.4, shirtD);
+      else rr(cx - 3.3, cy - 0.9, 6.6, 0.9, 0.4, shirtD);
+    }
+  };
+
+  if (view === 'side') {
+    // Pernas: paradas juntas; andando, abertas em tesoura (a de trás mais escura).
+    if (step === 0) {
+      limb(6, 13, 6, 16.3, 2.5, L.pants);
+      ell(6.5, 17.1, 1.6, 0.8, shoe);
+    } else {
+      const k = step === 1 ? 1 : -1;
+      limb(6, 13, 6 - 1.8 * k, 16.2, 2.2, pantsD);
+      ell(6 - 1.8 * k + 0.5, 17, 1.4, 0.75, shoe);
+      limb(6, 13, 6 + 1.8 * k, 16.2, 2.2, L.pants);
+      ell(6 + 1.8 * k + 0.5, 17, 1.4, 0.75, shoe);
+    }
+    const sw = 5.2 + grow * 1.2;
+    const sx = 6 - sw / 2;
+    rr(sx, 7, sw, 6.3, 1.8, grad(sx, sx + sw, L.shirt, shirtD));
+    if (L.zombie) {
+      // Braços esticados para a frente.
+      limb(6.4, 8.7, 10.4, 8.9 + (step === 1 ? 0.6 : 0), 1.5, L.skin);
+      ell(5, 10.2, 1.1, 0.6, 0x7a1f1a);
+    } else {
+      const s = step === 1 ? 1.4 : step === 2 ? -1.4 : 0;
+      limb(6, 8.2, 6 + s, 11.1, 1.6, shirtD);
+      ell(6 + s, 11.8, 0.75, 0.75, L.skin);
+    }
+    head(false, true);
+    return;
   }
 
   const back = view === 'up';
-  // Pernas
   const liftL = step === 1 ? 1 : 0;
   const liftR = step === 2 ? 1 : 0;
-  p(3, 13, 6, 1, L.pants);
-  p(3, 13, 2, 4 - liftL, L.pants);
-  p(3, 17 - liftL, 2, 1, shoe);
-  p(7, 13, 2, 4 - liftR, L.pants);
-  p(7, 17 - liftR, 2, 1, shoe);
-  if (liftL) p(3, 15, 2, 1, pantsD);
-  if (liftR) p(7, 15, 2, 1, pantsD);
-  // Tronco
-  const tx = 2 - grow;
-  const tw = 8 + grow * 2;
-  p(tx, 7, tw, 6, L.shirt);
-  p(tx + tw - 1, 7, 1, 6, shirtD);
-  p(tx, 12, tw, 1, shirtD);
-  // Braços
+  limb(4.4, 13, 4.4, 16.3 - liftL, 2.2, liftL ? pantsD : L.pants);
+  ell(4.4, 17.1 - liftL, 1.25, 0.8, shoe);
+  limb(7.6, 13, 7.6, 16.3 - liftR, 2.2, liftR ? pantsD : L.pants);
+  ell(7.6, 17.1 - liftR, 1.25, 0.8, shoe);
+  rr(3.2, 11.8, 5.6, 2.4, 0.9, grad(3.2, 8.8, L.pants, pantsD));
+
+  const tx = 2.4 - grow * 0.8;
+  const tw = 7.2 + grow * 1.6;
+  const swing = step === 1 ? -1 : step === 2 ? 1 : 0;
   if (L.zombie) {
-    p(tx - 2, 8 + liftL, 2, 2, L.skin);
-    p(tx + tw, 8 + liftR, 2, 2, L.skin);
-    if (!back) {
-      p(tx + 2, 9, 2, 1, 0x7a1f1a);
-      p(tx + 3, 10, 2, 1, 0x7a1f1a);
-      p(tx + tw - 3, 11, 1, 1, L.skin);
-    }
+    // Braços caídos e descobertos.
+    limb(tx + 0.3, 8, tx - 0.7, 10.6 + liftL, 1.5, L.skin);
+    limb(tx + tw - 0.3, 8, tx + tw + 0.7, 10.6 + liftR, 1.5, skinD);
   } else {
-    const swing = step === 1 ? -1 : step === 2 ? 1 : 0;
-    p(tx - 1, 7, 1, 4 + swing, shirtD);
-    p(tx - 1, 11 + swing, 1, 1, L.skin);
-    p(tx + tw, 7, 1, 4 - swing, shirtD);
-    p(tx + tw, 11 - swing, 1, 1, L.skin);
+    limb(tx + 0.3, 8, tx - 0.3, 10.9 + swing, 1.5, L.shirt);
+    ell(tx - 0.3, 11.6 + swing, 0.75, 0.75, L.skin);
+    limb(tx + tw - 0.3, 8, tx + tw + 0.3, 10.9 - swing, 1.5, shirtD);
+    ell(tx + tw + 0.3, 11.6 - swing, 0.75, 0.75, skinD);
   }
-  // Cabeça
-  p(2, 1, 8, 6, L.skin);
-  clear(2, 1);
-  clear(9, 1);
-  clear(2, 6);
-  clear(9, 6);
+  rr(tx, 7, tw, 6.3, 1.7, grad(tx, tx + tw, L.shirt, shirtD));
   if (!back) {
-    if (asleep) {
-      p(3, 4, 2, 1, skinD);
-      p(7, 4, 2, 1, skinD);
-    } else {
-      p(4, 4, 1, 1, eye);
-      p(7, 4, 1, 1, eye);
+    // Gola.
+    fill(skinD);
+    ctx.beginPath();
+    ctx.moveTo(5.1, 7);
+    ctx.lineTo(6.9, 7);
+    ctx.lineTo(6, 8.2);
+    ctx.fill();
+    if (L.zombie) {
+      ell(tx + 2.6, 9.6, 1.2, 0.7, 0x7a1f1a, 0.4);
+      ell(tx + 3.8, 10.7, 0.8, 0.5, 0x7a1f1a);
     }
-    if (L.zombie) p(5, 6, 2, 1, 0x3a1512);
   }
-  if (L.hairStyle === 'cap') {
-    p(2, 0, 8, 3, L.shirt);
-    clear(2, 0);
-    clear(9, 0);
-    if (!back) p(2, 3, 8, 1, shirtD);
-  } else if (L.hairStyle !== 'bald') {
-    p(3, 0, 6, 1, L.hair);
-    p(2, 1, 8, back ? 4 : 2, L.hair);
-    if (L.hairStyle === 'long') {
-      p(2, 3, 1, 5, L.hair);
-      p(9, 3, 1, 5, L.hair);
-      if (back) p(2, 5, 8, 3, L.hair);
-    } else if (back) {
-      p(3, 5, 6, 1, L.hair);
-    }
-    if (!back) p(4, 1, 2, 1, shade(L.hair, 1.25));
-  } else if (L.zombie) {
-    p(4, 1, 2, 1, skinD);
-  }
-  return outline(grid);
+  head(back, false);
 }
 
-/** Contorno escuro em volta da silhueta: é o que faz o boneco destacar do chão. */
-function outline(grid: Grid): Grid {
-  const out = grid.slice();
-  for (let y = 0; y < GH; y++) {
-    for (let x = 0; x < GW; x++) {
-      if (grid[y * GW + x] !== null) continue;
-      const near =
-        (x > 0 && grid[y * GW + x - 1] !== null) ||
-        (x < GW - 1 && grid[y * GW + x + 1] !== null) ||
-        (y > 0 && grid[(y - 1) * GW + x] !== null) ||
-        (y < GH - 1 && grid[(y + 1) * GW + x] !== null);
-      if (near) out[y * GW + x] = OUTLINE;
-    }
-  }
+/** Quadro pronto: a figura com um contorno escuro em volta, que a destaca do chão. */
+function frameCanvas(L: Look, view: View, step: 0 | 1 | 2, asleep = false): HTMLCanvasElement {
+  const w = FRAME_W * SS;
+  const h = FRAME_H * SS;
+  const make = () => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    return c;
+  };
+  const fig = make();
+  const fctx = fig.getContext('2d')!;
+  fctx.scale(U, U);
+  fctx.translate(OX, OY);
+  paintFigure(fctx, L, view, step, asleep);
+  // Silhueta escura da mesma figura, carimbada em volta.
+  const sil = make();
+  const sctx = sil.getContext('2d')!;
+  sctx.drawImage(fig, 0, 0);
+  sctx.globalCompositeOperation = 'source-in';
+  sctx.fillStyle = OUTLINE;
+  sctx.fillRect(0, 0, w, h);
+  const out = make();
+  const octx = out.getContext('2d')!;
+  const d = U * 0.42;
+  for (let k = 0; k < 12; k++) octx.drawImage(sil, Math.cos((k * Math.PI) / 6) * d, Math.sin((k * Math.PI) / 6) * d);
+  octx.drawImage(fig, 0, 0);
   return out;
 }
 
@@ -234,20 +283,16 @@ const VIEWS: View[] = ['down', 'up', 'side'];
 /** Cria (uma vez por visual) a textura e as animações de andar. */
 export function ensureLook(scene: Phaser.Scene, L: Look): string {
   if (scene.textures.exists(L.key)) return L.key;
-  const tex = scene.textures.createCanvas(L.key, FRAME_W * 3, FRAME_H * 4)!;
-  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  const fw = FRAME_W * SS;
+  const fh = FRAME_H * SS;
+  const tex = scene.textures.createCanvas(L.key, fw * 3, fh * 4)!;
   const ctx = tex.getContext();
-  const blit = (grid: Grid, col: number, row: number, name: string) => {
-    for (let i = 0; i < grid.length; i++) {
-      const c = grid[i];
-      if (c === null) continue;
-      ctx.fillStyle = `#${c.toString(16).padStart(6, '0')}`;
-      ctx.fillRect(col * FRAME_W + (i % GW) * PX, row * FRAME_H + Math.floor(i / GW) * PX, PX, PX);
-    }
-    tex.add(name, 0, col * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H);
+  const blit = (frame: HTMLCanvasElement, col: number, row: number, name: string) => {
+    ctx.drawImage(frame, col * fw, row * fh);
+    tex.add(name, 0, col * fw, row * fh, fw, fh);
   };
   VIEWS.forEach((v, row) => {
-    for (const step of [0, 1, 2] as const) blit(drawFrame(L, v, step), step, row, `${v}${step}`);
+    for (const step of [0, 1, 2] as const) blit(frameCanvas(L, v, step), step, row, `${v}${step}`);
     scene.anims.create({
       key: `${L.key}-${v}`,
       frames: [1, 0, 2, 0].map((n) => ({ key: L.key, frame: `${v}${n}` })),
@@ -255,7 +300,7 @@ export function ensureLook(scene: Phaser.Scene, L: Look): string {
       repeat: -1,
     });
   });
-  blit(drawFrame(L, 'down', 0, true), 0, 3, 'sleep');
+  blit(frameCanvas(L, 'down', 0, true), 0, 3, 'sleep');
   tex.refresh();
   return L.key;
 }
@@ -275,7 +320,7 @@ export class Actor {
   constructor(scene: Phaser.Scene, look: Look) {
     this.key = ensureLook(scene, look);
     this.shadow = scene.add.ellipse(0, 0, look.build === 'big' ? 22 : 18, 6, 0x000000, 0.35);
-    this.sprite = scene.add.sprite(0, PX, this.key, 'down0').setOrigin(0.5, 1);
+    this.sprite = scene.add.sprite(0, PX, this.key, 'down0').setOrigin(0.5, 1).setScale(1 / SS);
     this.container = scene.add.container(0, 0, [this.shadow, this.sprite]);
   }
 
@@ -305,7 +350,7 @@ export class Actor {
     this.pose = pose;
     this.sprite.setCrop().setAngle(0).setPosition(0, PX);
     this.shadow.setVisible(pose === 'stand');
-    if (pose === 'bed') this.sprite.setCrop(0, 0, FRAME_W, 20);
+    if (pose === 'bed') this.sprite.setCrop(0, 0, FRAME_W * SS, 20 * SS);
     if (pose === 'floor') this.sprite.setAngle(-90).setPosition(FRAME_H / 2 - 4, 0);
     this.refresh();
   }

@@ -62,6 +62,17 @@ const place = (id, what) => ({
   width: 800,
   prompt: `${what} Seen from across the street at dusk. Empty street, no people, weeds through the pavement. ${STYLE}`,
 });
+/** Refaz uma pintura já aprovada em 4K. O arquivo leve sai com o nome da original (`as`). */
+const hd = (id, as, ref) => ({
+  id,
+  as,
+  aspect: '4:3',
+  size: '4K',
+  // 3840 cabe no limite de textura dos celulares e segura a câmera aproximada.
+  width: 3840,
+  refs: [ref],
+  prompt: 'Upscale the attached painting to a much higher resolution. It must stay the SAME image: identical composition, framing, geometry, colours, lighting and content, with every wall, building, street and object in exactly the same position and size. Do not add, remove, move or restyle anything, and do not crop or pad. Only add resolution: crisper edges, finer brush texture and small surface detail (cracks, grain, stains, leaves, roof tiles) consistent with what is already there.',
+});
 const scene = (id, what) => ({ id, aspect: '16:9', width: 960, prompt: `${what} ${STYLE}` });
 
 /** Textura de superfície, vista reta de cima, sem luz marcada: o jogo repete e ilumina. */
@@ -104,16 +115,16 @@ const JOBS = [
   texture('tex-walltop', 'Top-down view of the broken top of a thick masonry wall: rough grey cement and crumbling plaster with exposed edges of red brick, dust and small rubble.'),
   texture('tex-wallface', 'Straight front view of an old interior house wall: dirty cracked off-white plaster with large patches fallen away showing horizontal courses of red brick, damp stains running down, darker grime near the bottom.'),
   // Móveis e construções
-  prop('prop-bed', 160, 'A narrow single bed: a low frame of rough planks with a thin stained mattress, a grey wool blanket and a flat pillow at the top end. The bed is placed vertically, head at the top of the image.'),
-  prop('prop-workbench', 180, 'A heavy improvised workbench made of an old door on trestles, with a vise, hand tools, a saw, wire coils and a small toolbox on top.'),
-  prop('prop-stove', 160, 'A small improvised wood-burning cooking stove made from a cut steel drum with a blackened pot on top, embers glowing in the opening, a short chimney pipe.'),
-  prop('prop-filter', 150, 'An improvised water filter: a blue plastic barrel standing on cinder blocks with a tap, a funnel with layered cloth, sand and charcoal on top, and a bucket under the tap.'),
-  prop('prop-latrine', 150, 'An improvised dry toilet: a wooden box seat with a hole over a bucket, a roll of paper and a small bucket of sawdust beside it.'),
-  prop('prop-radio', 150, 'An old shortwave ham radio set with dials and a handheld microphone, wired to a car battery, sitting on a small battered wooden table, a notepad beside it.'),
-  prop('prop-collector', 170, 'A rainwater collector: a large blue plastic drum with a stretched tarpaulin funnel on a rough wooden frame feeding into it, held with rope.'),
-  prop('prop-garden', 300, 'A wide rectangular raised vegetable bed made of rough planks, about twice as wide as it is deep, filled with dark soil and neat rows of young green vegetable plants.'),
-  prop('prop-barricade', 300, 'A long low barricade about three times wider than it is tall: nailed planks, a table on its side, a wardrobe door, sandbags and coils of wire piled together.'),
-  prop('prop-crates', 150, 'A small stack of scavenged supplies: two wooden crates, a few cans, a jerrycan and a folded tarp.'),
+  prop('prop-bed', 480, 'A narrow single bed: a low frame of rough planks with a thin stained mattress, a grey wool blanket and a flat pillow at the top end. The bed is placed vertically, head at the top of the image.'),
+  prop('prop-workbench', 540, 'A heavy improvised workbench made of an old door on trestles, with a vise, hand tools, a saw, wire coils and a small toolbox on top.'),
+  prop('prop-stove', 480, 'A small improvised wood-burning cooking stove made from a cut steel drum with a blackened pot on top, embers glowing in the opening, a short chimney pipe.'),
+  prop('prop-filter', 450, 'An improvised water filter: a blue plastic barrel standing on cinder blocks with a tap, a funnel with layered cloth, sand and charcoal on top, and a bucket under the tap.'),
+  prop('prop-latrine', 450, 'An improvised dry toilet: a wooden box seat with a hole over a bucket, a roll of paper and a small bucket of sawdust beside it.'),
+  prop('prop-radio', 450, 'An old shortwave ham radio set with dials and a handheld microphone, wired to a car battery, sitting on a small battered wooden table, a notepad beside it.'),
+  prop('prop-collector', 510, 'A rainwater collector: a large blue plastic drum with a stretched tarpaulin funnel on a rough wooden frame feeding into it, held with rope.'),
+  prop('prop-garden', 900, 'A wide rectangular raised vegetable bed made of rough planks, about twice as wide as it is deep, filled with dark soil and neat rows of young green vegetable plants.'),
+  prop('prop-barricade', 900, 'A long low barricade about three times wider than it is tall: nailed planks, a table on its side, a wardrobe door, sandbags and coils of wire piled together.'),
+  prop('prop-crates', 450, 'A small stack of scavenged supplies: two wooden crates, a few cans, a jerrycan and a folded tarp.'),
   // Mapa da região: pintura por cima da planta que o jogo desenha
   {
     id: 'region-map',
@@ -122,6 +133,9 @@ const JOBS = [
     refs: ['art/ref/region-layout.png'],
     prompt: `Repaint the attached rough city map as a finished, beautiful hand-painted game map of an abandoned Brazilian neighbourhood, keeping the SAME layout and the same camera: top-down view with a slight oblique tilt so building fronts are just visible, north at the top. Keep the wide river running vertically through the middle with its five small bridges, the regular grid of streets, and the city blocks in the same places. Fill the blocks with dense, varied small buildings: houses with terracotta tile roofs, flat concrete roofs with blue water tanks, corrugated metal roofs, backyards, walls, trees, a small overgrown square, vacant lots. The streets are cracked asphalt with abandoned cars, debris, weeds and fallen wires; the river is dark green water with muddy overgrown banks. Months after a collapse: no people, no lights, no smoke. Remove every label, icon, marker, outline, highlight, question mark, dark cloud and any piece of user interface from the reference: plain buildings in their place. Even soft overcast daylight, the whole map evenly visible, slightly darker toward the edges. ${STYLE}`,
   },
+  // Cenários em alta resolução: a pintura aprovada, refeita em 4K sem mudar nada de lugar.
+  hd('shelter-hd', 'shelter', 'art/raw/shelter.jpg'),
+  hd('region-map-hd', 'region-map', 'art/raw/region-map.jpg'),
   // Telas
   scene('title', 'Wide establishing shot of an old two-storey house with a walled yard in a ruined Brazilian neighbourhood at night, one window glowing with candlelight, boarded windows, power lines hanging, dead city skyline far behind under a heavy sky. Dark empty space in the upper third of the image.'),
   scene('door', 'View from inside a dark hallway looking at a barricaded front door of an old house; through a gap in the boards, the silhouettes of strangers wait outside in grey daylight. A hand-made barricade of planks and a chair, a lantern on the floor.'),
@@ -133,6 +147,8 @@ const JOBS = [
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 const raw = (id) => `art/raw/${id}.jpg`;
 const light = (id) => `public/art/${id}.webp`;
+/** Trabalhos cuja versão leve é feita por outro (o de alta resolução). */
+const SUPERSEDED = new Set(['shelter', 'region-map']);
 
 async function generate(job) {
   const parts = [{ text: job.prompt }];
@@ -144,7 +160,7 @@ async function generate(job) {
     headers: { 'content-type': 'application/json', 'x-goog-api-key': KEY },
     body: JSON.stringify({
       contents: [{ role: 'user', parts }],
-      generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: job.aspect } },
+      generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: job.aspect, ...(job.size ? { imageSize: job.size } : {}) } },
     }),
   });
   const json = await res.json();
@@ -206,7 +222,7 @@ console.log(`modelo ${MODEL} · ${jobs.length} trabalho(s)`);
 for (const job of jobs) {
   if (force || !existsSync(raw(job.id))) {
     if (!KEY) throw new Error('Falta GEMINI_API_KEY no .env.local');
-    if (spent() + 0.15 > BUDGET) {
+    if (spent() + (job.size === '4K' ? 0.26 : 0.15) > BUDGET) {
       console.log(`! ${job.id}: teto de US$ ${BUDGET} atingido. Aumente ART_BUDGET_USD no .env.local para continuar.`);
       continue;
     }
@@ -219,9 +235,9 @@ for (const job of jobs) {
       continue;
     }
   }
-  if (existsSync(raw(job.id))) {
+  if (existsSync(raw(job.id)) && !SUPERSEDED.has(job.id)) {
     if (job.key) await cutout(raw(job.id), light(job.id), job.width);
-    else await sharp(raw(job.id)).resize({ width: job.width }).webp({ quality: 82 }).toFile(light(job.id));
+    else await sharp(raw(job.id)).resize({ width: job.width }).webp({ quality: 82 }).toFile(light(job.as ?? job.id));
     if (job.large) await sharp(raw(job.id)).resize({ width: job.large }).webp({ quality: 84 }).toFile(light(`${job.id}-lg`));
   }
 }
