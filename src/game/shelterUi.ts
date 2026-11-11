@@ -3,7 +3,7 @@ import { banner, placeUrl } from './art';
 import { iconize } from './icons';
 import { LOCATIONS, RECIPES, RESOURCES, RISK_RULES, TASKS, locationById, type RecipeId, type ResourceId, type RiskRule, type TaskId } from '../data/shelter';
 import { TRAITS } from '../data/survivors';
-import type { Account } from '../net/backend';
+import type { Account, PushState } from '../net/backend';
 import type { ShelterCommand } from '../server/game';
 import { FRIEND, RIVAL, aliveSurvivors, bondOf, canAfford, dayOf, describeCost, emotionOf, friendsOf, hourOfDay, isNight, rivalsOf } from '../sim/shelter/core';
 import { pendingEmergencies } from '../sim/shelter/expeditions';
@@ -43,7 +43,8 @@ type Cmd =
   | { cmd: 'unqueue'; index: number }
   | { cmd: 'evacuate' }
   | { cmd: 'skip'; hours: number }
-  | { cmd: 'link' };
+  | { cmd: 'link' }
+  | { cmd: 'push' };
 
 export interface ShelterUiHooks {
   changed: () => void;
@@ -61,6 +62,10 @@ export interface ShelterUiHooks {
   profile: (id: string) => void;
   /** Abre a tela com todo o grupo. */
   group: () => void;
+  /** Em que pé estão os avisos neste aparelho (consultado ao abrir o painel). */
+  pushState: () => PushState | null;
+  /** Liga os avisos; devolve a mensagem para o jogador. */
+  enablePush: () => Promise<string>;
 }
 
 const EMOTION_LABEL: Record<Emotion, string> = { ok: 'bem', triste: 'triste', deprimido: 'deprimido(a)', quebrado: 'quebrado(a)' };
@@ -85,6 +90,7 @@ export class ShelterUi {
   private raidWho: string | null = null;
   private loadout = { weapon: false, bandages: 0 };
   private error = '';
+  private pushNote = '';
   private notice = '';
 
   constructor(
@@ -166,6 +172,14 @@ export class ShelterUi {
       case 'takeOver': this.hooks.takeOver(c.expId); return;
       case 'profile': this.hooks.profile(c.id); return;
       case 'group': this.hooks.group(); return;
+      case 'push':
+        this.pushNote = 'Pedindo permissão…';
+        this.hooks.changed();
+        void this.hooks.enablePush().then((msg) => {
+          this.pushNote = msg;
+          this.hooks.changed();
+        });
+        return;
       case 'skip': this.hooks.skip(c.hours); return;
       case 'link': {
         const input = this.hud.querySelector<HTMLInputElement>('input[name=email]');
@@ -345,6 +359,7 @@ export class ShelterUi {
     return `
       <div class="card"><h3>Diário</h3><div class="log tall">${diaryHtml(s.diary.slice(-80))}</div></div>
       ${this.accountCard()}
+      ${this.pushCard()}
       <div class="card"><h3>Ferramentas de teste</h3>
         <div class="row small"><span class="muted">1 dia de jogo = 12h reais. Avançar o relógio:</span>
           <span class="actions">${cmdBtn('+1h', { cmd: 'skip', hours: 1 })}${cmdBtn('+6h', { cmd: 'skip', hours: 6 })}</span></div>
@@ -429,6 +444,22 @@ export class ShelterUi {
       ${step('signal', 'Decifrar a transmissão')}
       ${step('supplies', 'Juntar combustível e mantimentos e partir')}
       ${detail}</div>`;
+  }
+
+  /** Avisos no celular: o servidor vigia o abrigo e chama quando algo importante acontece. */
+  private pushCard(): string {
+    if (!this.hooks.account().online) return '';
+    const st = this.hooks.pushState();
+    const body =
+      st === 'on'
+        ? '<div class="small good">Ligados neste aparelho.</div>'
+        : st === 'blocked'
+          ? '<div class="small warn">As notificações deste site estão bloqueadas no navegador. Libere nas configurações para receber avisos.</div>'
+          : st === 'unsupported'
+            ? '<div class="small muted">Este navegador não recebe avisos. No iPhone, instale o jogo pela opção "Adicionar à Tela de Início".</div>'
+            : `<div class="small muted" style="margin-bottom:6px">Receba um aviso quando baterem na porta, numa emergência, numa perda ou quando a expedição voltar, mesmo com o jogo fechado.</div>
+              <div class="actions">${cmdBtn('🚨 Ligar avisos neste aparelho', { cmd: 'push' }, 'primary')}</div>`;
+    return `<div class="card"><h3>Avisos</h3>${body}${this.pushNote ? `<div class="small warn" style="margin-top:6px">${this.pushNote}</div>` : ''}</div>`;
   }
 
   private accountCard(): string {

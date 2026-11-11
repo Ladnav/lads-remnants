@@ -62,7 +62,10 @@ O `.env.local` (fora do git) guarda também a senha do banco e o ref do projeto 
   - A simulação avança de forma preguiçosa a cada acesso (determinística, sem cron).
   - Incursões com ingresso: a semente vem do servidor e o loot sai da reprodução do log de ações. Fechar a aba no meio conta como fuga ferida.
   - `ALLOW_DEV_TOOLS` (secret da função) libera +1h/+6h no modo online. Está em `false` desde a publicação; para testar, `supabase secrets set ALLOW_DEV_TOOLS=true --project-ref <ref>`.
-  - Fica para a Fase 4b: push notifications (PWA) e o cron do tick.
+- **Fase 4b**: avisos no celular.
+  - O banco chama a função `tick` a cada 15 minutos (pg_cron). Ela avança o abrigo de quem pediu avisos e manda um web push quando batem na porta, numa emergência, numa perda, quando a expedição volta ou quando a comunidade acaba. No máximo um aviso por vez, o mais urgente.
+  - As regras ficam em `tickShelter` (`src/server/game.ts`), testadas em `tests/push.test.ts`.
+  - O jogador liga os avisos na aba Diário. No iPhone só funciona com o jogo instalado na tela de início.
 
 - **Revisão de mecânicas**:
   - Incursão ativa: uma por dia por sobrevivente, recusada com cansaço alto, e o loot do mapa segue o estoque do local. Um mapa rabiscado por local.
@@ -86,6 +89,19 @@ O `.env.local` (fora do git) guarda também a senha do banco e o ref do projeto 
 - **Objetivo**: sair da cidade. Construir o rádio, decifrar a transmissão (36h de escuta noturna, sozinho) e juntar 6 de combustível mais comida e água para a estrada. Partir encerra a história com quem estiver vivo.
 
 Balanceamento atual (`npm run balance`, 40 sementes, até 45 dias): sem nenhuma visita, a comunidade dura cerca de 7 dias de jogo. Com uma única visita deixando ordens permanentes, cerca de 17 dias (8 dias reais). Um jogador casual simulado (2 visitas por dia, duas expedições por noite, sem incursões ativas) dura cerca de 29 dias, e só 1 em 40 consegue partir: sem incursões ativas faltam peças para o rádio.
+
+### Publicar os avisos no servidor
+Passos que mexem em produção e por isso são feitos à mão, uma vez:
+```bash
+npm run vapid -- --secrets                                             # gera as chaves (se faltarem) e escreve .push-secrets.env
+supabase secrets set --env-file .push-secrets.env --project-ref <ref>  # chaves e contato para a função tick
+rm .push-secrets.env
+supabase db push                                                       # tabelas push_subscriptions e tick_state, e o agendamento
+npm run deploy:edge                                                    # função game com o pacote novo
+supabase functions deploy tick --no-verify-jwt                         # função do agendador
+npm run deploy:pages                                                   # site com o botão de avisos
+```
+O build do site precisa de `VITE_VAPID_PUBLIC_KEY` no `.env.local` (gravada pelo `npm run vapid`).
 
 ### Gasto com arte
 Cada chamada paga à API fica em `art/ledger.json`, com tokens e custo estimado pela tabela do Google. O script para de gerar ao chegar em `ART_BUDGET_USD` (padrão US$ 6, no `.env.local`). A API não informa saldo: o valor real está no painel do Google. Os próximos passos estão em [docs/ROADMAP.md](docs/ROADMAP.md).

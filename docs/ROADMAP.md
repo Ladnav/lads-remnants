@@ -39,7 +39,7 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
 
 ## Dependem do dono do projeto (não fazer sem ele)
 - [x] **Publicação.** No ar em https://ladnav.github.io/lads-remnants/ (`npm run deploy:pages`), instalável como PWA, com `ALLOW_DEV_TOOLS` desligado.
-- [ ] **Notificações (Fase 4b).**
+- [ ] **Notificações (Fase 4b).** Código pronto e testado; falta publicar no servidor (passos no README, "Publicar os avisos no servidor") e testar um aviso de verdade num celular.
 - [ ] **Ajuste da dificuldade do objetivo**, depois de uma semana de jogo real.
 - [ ] **Social (Fase 5):** rastros, corpos e comércio.
 - [ ] **Mais arte gerada.** O gasto estimado está em `art/ledger.json`; o teto é

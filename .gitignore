@@ -6,3 +6,6 @@ dist
 .env*.local
 supabase/functions/game/_game.js
 supabase/.temp/
+
+# Arquivo temporário com as chaves dos avisos
+.push-secrets.env

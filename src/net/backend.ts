@@ -30,6 +30,19 @@ export interface Backend {
   linkEmail(email: string): Promise<string>;
   /** Último aviso ao sair da página (marca o que o jogador já viu). */
   leaving(): void;
+  /** Liga os avisos neste aparelho; devolve a mensagem para mostrar ao jogador. */
+  enablePush(): Promise<string>;
+}
+
+/** Em que pé estão os avisos neste aparelho. */
+export type PushState = 'on' | 'off' | 'blocked' | 'unsupported';
+
+export async function pushState(): Promise<PushState> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported';
+  if (Notification.permission === 'denied') return 'blocked';
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) return 'unsupported';
+  return (await reg.pushManager.getSubscription()) ? 'on' : 'off';
 }
 
 /** Modo offline: as mesmas regras do servidor, rodando no navegador e salvando no localStorage. */
@@ -91,5 +104,9 @@ export class LocalBackend implements Backend {
 
   leaving(): void {
     if (this.state) saveGame(this.state);
+  }
+
+  enablePush(): Promise<string> {
+    return Promise.resolve('No modo offline não há avisos: é o servidor que vigia o abrigo com o jogo fechado.');
   }
 }

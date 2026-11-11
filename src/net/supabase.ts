@@ -92,6 +92,28 @@ export class SupabaseBackend implements Backend {
     return `Enviamos um link de confirmação para ${email}. Depois de confirmar, o abrigo fica salvo nesse e-mail.`;
   }
 
+  async enablePush(): Promise<string> {
+    const key = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+    if (!key || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      return 'Este navegador não recebe avisos. No iPhone, instale o jogo pela opção "Adicionar à Tela de Início" e tente de novo.';
+    }
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) return 'Os avisos só funcionam na versão publicada do jogo.';
+    if ((await Notification.requestPermission()) !== 'granted') return 'Sem permissão. Libere as notificações deste site nas configurações do navegador.';
+    await this.ensureSession();
+    try {
+      const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
+      const j = sub.toJSON();
+      const { error } = await this.sb
+        .from('push_subscriptions')
+        .upsert({ endpoint: j.endpoint, user_id: this.session!.user.id, p256dh: j.keys?.p256dh, auth: j.keys?.auth });
+      if (error) return `Não deu para registrar o aviso: ${error.message}`;
+    } catch (e) {
+      return `Não deu para ligar os avisos: ${(e as Error).message}`;
+    }
+    return 'Avisos ligados neste aparelho. Você será chamado quando baterem na porta, numa emergência, numa perda ou quando a expedição voltar.';
+  }
+
   leaving(): void {
     if (!this.session) return;
     // keepalive deixa a requisição terminar mesmo com a aba fechando.

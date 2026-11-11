@@ -30,3 +30,35 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(caches.match(req).then((hit) => hit ?? fetch(req).then(keep)));
   }
 });
+
+// Aviso vindo do servidor. Com o jogo aberto e à vista não incomoda: o próprio painel já mostra.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      if (wins.some((w) => w.visibilityState === 'visible')) return;
+      return self.registration.showNotification(data.title || 'Lads Remnants', {
+        body: data.body || '',
+        tag: data.tag || 'abrigo',
+        icon: 'icons/icon-192.png',
+        badge: 'icons/icon-192.png',
+        lang: 'pt-BR',
+      });
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      const open = wins.find((w) => w.url.startsWith(self.registration.scope));
+      return open ? open.focus() : self.clients.openWindow(self.registration.scope);
+    }),
+  );
+});

@@ -5,8 +5,8 @@ import type { ItemId } from '../data/items';
 import { locationById, type RecipeId, type RiskRule, type TaskId } from '../data/shelter';
 import { replay } from '../sim/raid/raid';
 import type { Action } from '../sim/raid/types';
-import { clamp, dayOf, log } from '../sim/shelter/core';
-import { cancelExpedition, delegateEmergency, sendExpedition, takeOverEmergency } from '../sim/shelter/expeditions';
+import { aliveSurvivors, clamp, dayOf, hourOfDay, log } from '../sim/shelter/core';
+import { cancelExpedition, delegateEmergency, pendingEmergencies, sendExpedition, takeOverEmergency } from '../sim/shelter/expeditions';
 import {
   advanceTo,
   applyRaidResult,
@@ -80,6 +80,59 @@ export function openShelter(saved: ShelterState | null, nowMs: number, newSeed: 
 }
 
 /** Carrega sem encerrar incursões: usado por comandos que chegam durante uma partida. */
+/** Um aviso para o celular do jogador. `tag` agrupa: um aviso novo do mesmo tipo troca o anterior. */
+export interface Notice {
+  title: string;
+  body: string;
+  tag: string;
+}
+
+const clockOf = (hour: number): string => `dia ${dayOf(hour)}, ${String(hourOfDay(hour)).padStart(2, '0')}h`;
+
+/**
+ * Avança o abrigo até agora sem o jogador por perto (chamado pelo agendador do servidor)
+ * e diz se aconteceu algo que mereça um aviso. No máximo um aviso por vez, o mais urgente.
+ * Não mexe em quem está no meio de uma incursão nem em história encerrada.
+ */
+export function tickShelter(saved: ShelterState, nowMs: number): { state: ShelterState; changed: boolean; notice: Notice | null } {
+  const s = migrate(saved);
+  if (s.activeRaid || isFinished(s)) return { state: s, changed: false, notice: null };
+  const before = {
+    hour: s.hour,
+    diary: s.diary.length,
+    doors: new Set(s.dilemmas.map((d) => d.id)),
+    alarms: new Set(pendingEmergencies(s).map((e) => e.id)),
+    alive: aliveSurvivors(s).length,
+    trips: s.expeditions.map((e) => e.id),
+  };
+  advanceTo(s, nowMs);
+  if (s.hour === before.hour) return { state: s, changed: false, notice: null };
+
+  const news = s.diary.slice(Math.min(before.diary, s.diary.length));
+  const lastBad = [...news].reverse().find((e) => e.tone === 'bad');
+  const alarm = pendingEmergencies(s).find((e) => !before.alarms.has(e.id));
+  const door = s.dilemmas.find((d) => !before.doors.has(d.id));
+  let notice: Notice | null = null;
+  if (isGameOver(s)) {
+    notice = { title: 'A comunidade acabou', body: lastBad?.text ?? 'Ninguém sobrou no abrigo.', tag: 'fim' };
+  } else if (alarm?.emergency) {
+    const who = s.survivors.find((v) => v.id === alarm.emergency!.survivorId)?.name ?? 'Alguém';
+    notice = {
+      title: `Emergência: ${who} está encurralado(a)`,
+      body: `Em ${locationById(alarm.locationId).name}. Assuma o controle ou deixe com a sorte até o ${clockOf(alarm.emergency.deadline)}.`,
+      tag: 'emergencia',
+    };
+  } else if (door) {
+    notice = { title: 'Batem na porta', body: `${door.title}. Vai embora em ${Math.max(1, door.expiresHour - s.hour)}h de jogo.`, tag: 'porta' };
+  } else if (aliveSurvivors(s).length < before.alive) {
+    notice = { title: 'Uma perda no abrigo', body: lastBad?.text ?? 'Alguém não está mais entre vocês.', tag: 'perda' };
+  } else if (before.trips.some((id) => !s.expeditions.some((e) => e.id === id))) {
+    const back = [...news].reverse().find((e) => /volt/i.test(e.text));
+    notice = { title: 'A expedição voltou', body: back?.text ?? 'O grupo está de volta ao abrigo.', tag: 'expedicao' };
+  }
+  return { state: s, changed: true, notice };
+}
+
 export function resumeShelter(saved: ShelterState | null, nowMs: number, newSeed: number): ShelterState {
   return saved ? migrate(saved) : createShelter(newSeed, nowMs);
 }

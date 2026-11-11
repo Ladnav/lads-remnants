@@ -15,7 +15,8 @@
     "art": "node scripts/art.mjs",
     "icons": "node scripts/icons.mjs",
     "preview": "vite preview --port 4173",
-    "deploy:pages": "node scripts/deploy-pages.mjs"
+    "deploy:pages": "node scripts/deploy-pages.mjs",
+    "vapid": "node scripts/vapid.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

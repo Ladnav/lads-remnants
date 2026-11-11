@@ -12,7 +12,7 @@ import { ShelterScene } from './game/ShelterScene';
 import { isMuted, setAmbience, sfx, toggleMute, unlockOnGesture } from './game/sound';
 import { ensureLook, survivorLook } from './game/sprites';
 import { SHOWN_RESOURCES, ShelterUi, clock, diaryHtml, fmt, groupHtml, profileHtml, type View } from './game/shelterUi';
-import { LocalBackend, type Backend } from './net/backend';
+import { LocalBackend, pushState, type Backend, type PushState } from './net/backend';
 import { SupabaseBackend } from './net/supabase';
 import { applyCommand, type RaidRequest } from './server/game';
 import { MAP_H, MAP_W } from './sim/raid/mapgen';
@@ -44,6 +44,13 @@ let busy = false;
 const shelterScene = new ShelterScene(() => render());
 const regionScene = new RegionScene(() => render());
 const raidScene = new RaidScene(() => raidUi.render());
+
+/** Estado dos avisos neste aparelho; consultado uma vez e a cada mudança. */
+let pushNow: PushState | null = null;
+async function refreshPush(): Promise<void> {
+  pushNow = await pushState().catch(() => 'unsupported' as const);
+}
+void refreshPush().then(() => shelter && render());
 
 const portraits = new Map<string, string>();
 /** Recorta o quadro de frente do sprite para usar como retrato no painel. */
@@ -98,6 +105,12 @@ const shelterUi = new ShelterUi({ hud, top: topbar, ticker }, {
   portrait,
   profile: (id) => showProfile(id),
   group: () => showGroup(),
+  pushState: () => pushNow,
+  enablePush: async () => {
+    const msg = await backend.enablePush();
+    await refreshPush();
+    return msg;
+  },
 });
 const raidUi = new RaidUi(raidScene, hud, overlay, topbar, ticker);
 regionScene.setSelectHandler((id) => shelterUi.select(id));

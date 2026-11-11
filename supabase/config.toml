@@ -418,3 +418,7 @@ enabled = true
 # (inclui usuários anônimos), por isso o verify_jwt automático fica desligado.
 [functions.game]
 verify_jwt = false
+
+# Chamada pelo pg_cron, sem login; protegida por intervalo mínimo entre execuções.
+[functions.tick]
+verify_jwt = false
