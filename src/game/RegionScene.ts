@@ -165,6 +165,7 @@ export class RegionScene extends Phaser.Scene {
       }
     }
 
+    const walkers: LightSource[] = [];
     // Rotas das expedições por cima dos prédios
     for (const e of s.expeditions) {
       const l = LOCATIONS.find((x) => x.id === e.locationId)!;
@@ -177,6 +178,8 @@ export class RegionScene extends Phaser.Scene {
         const k = e.emergency ? 1 : t < 0.25 ? t / 0.25 : t > 0.75 ? (1 - t) / 0.25 : 1;
         const site = { x: to.x + TILE * 1.9, y: to.y + 10 };
         const members = s.survivors.filter((v) => v.expeditionId === e.id);
+        // A lanterna do grupo: à noite é o que se vê deles no caminho.
+        if (members.length) walkers.push({ x: home.x + (site.x - home.x) * k + 6, y: home.y + (site.y - home.y - 10) * k - 4, r: 58 });
         members.forEach((v, i) => {
           const a = new Actor(this, survivorLook(v.id));
           a.container.setPosition(home.x + (site.x - home.x) * k + i * 13, home.y + 10 + (site.y - home.y - 10) * k).setDepth(31);
@@ -192,7 +195,7 @@ export class RegionScene extends Phaser.Scene {
 
     // À noite só se vê o abrigo e onde há gente de lanterna.
     const hr = hourOfDay(s.hour);
-    const lights: LightSource[] = [{ x: home.x, y: home.y + 6, r: 105 }];
+    const lights: LightSource[] = [{ x: home.x, y: home.y + 6, r: 105 }, ...walkers];
     for (const e of s.expeditions) {
       if (!e.departed) continue;
       const to = center(LOCATIONS.find((x) => x.id === e.locationId)!.pos);

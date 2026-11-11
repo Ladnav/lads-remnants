@@ -133,6 +133,11 @@ export class ShelterUi {
     this.error = msg;
   }
 
+  /** Abre uma aba (usado pelo endereço: `?tab=map`). */
+  show(tab: Tab): void {
+    this.openTab(tab);
+  }
+
   select(locationId: string): void {
     this.selected = locationId;
     this.error = '';

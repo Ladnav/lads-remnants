@@ -169,6 +169,9 @@ async function boot(): Promise<void> {
   shelterUi.attach(shelter);
   if (shelterScene.ready) render();
   else game.scene.start('shelter');
+  // `?tab=map` (ou bench, log) abre direto numa aba: serve para links e capturas de tela.
+  const tab = new URLSearchParams(location.search).get('tab');
+  if (tab === 'map' || tab === 'bench' || tab === 'log') shelterUi.show(tab);
   if (shelter.hour > seenBefore) showReport(seenBefore, resBefore, aliveBefore);
   else if (isFinished(shelter)) showGameOver();
 }
