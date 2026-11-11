@@ -173,6 +173,11 @@ function switchTo(v: View): void {
   }
 }
 
+// Instalável e com abertura sem rede: só na versão publicada, para não atrapalhar o desenvolvimento.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {}));
+}
+
 // ---------- Som ----------
 unlockOnGesture();
 const muteBtn = document.getElementById('mute')!;

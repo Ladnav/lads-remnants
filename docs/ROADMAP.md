@@ -38,7 +38,7 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
   o registro de custo; refazer as capturas antigas em `docs/screenshots/`.
 
 ## Dependem do dono do projeto (não fazer sem ele)
-- [ ] **Publicação e PWA.** Escolher hospedagem, criar repositório remoto, desligar
+- [ ] **Publicação.** (PWA pronto; falta hospedar) Escolher hospedagem, criar repositório remoto, desligar
   `ALLOW_DEV_TOOLS` no servidor.
 - [ ] **Notificações (Fase 4b).**
 - [ ] **Ajuste da dificuldade do objetivo**, depois de uma semana de jogo real.
