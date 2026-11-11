@@ -91,7 +91,7 @@ O `.env.local` (fora do git) guarda também a senha do banco e o ref do projeto 
 Balanceamento atual (`npm run balance`, 40 sementes, até 45 dias): sem nenhuma visita, a comunidade dura cerca de 7 dias de jogo. Com uma única visita deixando ordens permanentes, cerca de 17 dias (8 dias reais). Um jogador casual simulado (2 visitas por dia, duas expedições por noite, sem incursões ativas) dura cerca de 29 dias, e só 1 em 40 consegue partir: sem incursões ativas faltam peças para o rádio.
 
 - **Primeiros minutos**: cartão "Primeiros passos" com seis passos guiados (bancada, porta, conversa, expedição, incursão, água), com um ponto na aba para onde ir. A primeira visita bate na porta 2h de jogo depois do começo (1h real), sem depender de sorte.
-- **Métricas**: as funções gravam em  aberturas do jogo, comandos, incursões, fim da história e recomeço.  mostra o resumo: jogadores, quem voltou no dia seguinte e depois de uma semana, incursões, mortes e saídas da cidade.
+- **Métricas**: as funções gravam em `play_events` aberturas do jogo, comandos, incursões, fim da história e recomeço. `npm run metrics` mostra o resumo: jogadores, quem voltou no dia seguinte e depois de uma semana, incursões, mortes e saídas da cidade.
 
 ### Publicar os avisos no servidor
 Passos que mexem em produção e por isso são feitos à mão, uma vez:
