@@ -14,7 +14,8 @@
     "smoke:online": "vite-node scripts/smoke-online.ts",
     "art": "node scripts/art.mjs",
     "icons": "node scripts/icons.mjs",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173",
+    "deploy:pages": "node scripts/deploy-pages.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
