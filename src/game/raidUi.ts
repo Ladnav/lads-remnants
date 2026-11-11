@@ -21,6 +21,7 @@ import type { RaidTicket } from '../sim/shelter/types';
 import { faceUrl } from './art';
 import { iconize } from './icons';
 import type { RaidScene } from './RaidScene';
+import { sfx } from './sound';
 
 /** Interface da incursão ativa: HUD lateral, teclado e tela de fim. */
 export class RaidUi {
@@ -134,7 +135,13 @@ export class RaidUi {
   private act(action: Action): void {
     const s = this.state;
     if (!s || s.status !== 'active') return;
-    this.log.push(...applyAction(s, action));
+    const events = applyAction(s, action);
+    this.log.push(...events);
+    // Som da ação: um golpe ou susto fala mais alto que o passo.
+    if (events.some((e) => e.tone === 'bad')) sfx('hit');
+    else if (action.type === 'move') sfx('step');
+    else if (action.type === 'search' || action.type === 'take') sfx('search');
+    else if (action.type === 'extract') sfx('good');
     this.render();
     if (s.status !== 'active') setTimeout(() => this.showEnd(), 700);
   }

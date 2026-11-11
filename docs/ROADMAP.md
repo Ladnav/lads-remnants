@@ -9,9 +9,9 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
 - Commit local na `main`, mensagem em português. Nunca `git push`, nunca publicar.
 - Não rodar `npm run art` com geração (gasta créditos do Gemini) nem `npm run deploy:edge`.
 - Não mexer em `.env.local`.
-- Direção de arte: manter o estilo do jogo (cenário desenhado por código, traço simples,
-  tom sombrio). Arte pintada só em retratos, ilustrações e telas de menu, e só a que já existe
-  em `public/art/`. Nada de cenário elaborado ou 3D.
+- Direção de arte: tom sombrio e realista. Os cenários do abrigo e do mapa são pinturas feitas
+  sobre a planta exata do jogo; a incursão é desenhada por código. Não trocar nem gerar arte
+  nova sem o dono do projeto.
 - Se um item depender de decisão do dono do projeto, não adivinhar: anotar a dúvida no item
   e passar para o próximo.
 
@@ -32,9 +32,9 @@ primeiro item sem marca, faz, confere, commita e marca aqui com `[x]`.
   e quem partiu, em tom apagado.
 - [x] **Câmera no celular.** Em tela estreita o abrigo e o mapa encolhem demais. Aproximar a
   câmera e permitir arrastar, como a incursão já faz seguindo o personagem.
-- [ ] **Som.** Ambiente (chuva, vento, noite) e efeitos curtos (porta, golpe, aviso), gerados
+- [x] **Som.** Ambiente (chuva, vento, noite) e efeitos curtos (porta, golpe, aviso), gerados
   por WebAudio, sem baixar arquivos. Com botão de mudo que fica salvo no navegador.
-- [ ] **README e capturas.** Atualizar `README.md` com a repaginação, a ficha, `npm run art` e
+- [x] **README e capturas.** Atualizar `README.md` com a repaginação, a ficha, `npm run art` e
   o registro de custo; refazer as capturas antigas em `docs/screenshots/`.
 
 ## Dependem do dono do projeto (não fazer sem ele)

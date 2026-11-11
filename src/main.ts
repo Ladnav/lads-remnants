@@ -3,12 +3,13 @@ import Phaser from 'phaser';
 import { RESOURCES, type ResourceId } from './data/shelter';
 import { banner, faceLargeUrl, faceUrl } from './game/art';
 import { GalleryScene } from './game/GalleryScene';
-import { iconize } from './game/icons';
+import { iconUrl, iconize } from './game/icons';
 import { RES, TILE, WALL_H } from './game/oblique';
 import { RaidScene } from './game/RaidScene';
 import { RaidUi } from './game/raidUi';
 import { RegionScene } from './game/RegionScene';
 import { ShelterScene } from './game/ShelterScene';
+import { isMuted, setAmbience, sfx, toggleMute, unlockOnGesture } from './game/sound';
 import { ensureLook, survivorLook } from './game/sprites';
 import { SHOWN_RESOURCES, ShelterUi, clock, diaryHtml, fmt, groupHtml, profileHtml, type View } from './game/shelterUi';
 import { LocalBackend, type Backend } from './net/backend';
@@ -16,7 +17,8 @@ import { SupabaseBackend } from './net/supabase';
 import { applyCommand, type RaidRequest } from './server/game';
 import { MAP_H, MAP_W } from './sim/raid/mapgen';
 import type { Action } from './sim/raid/types';
-import { aliveSurvivors, dayOf } from './sim/shelter/core';
+import { aliveSurvivors, dayOf, hourOfDay, isNight } from './sim/shelter/core';
+import { pendingEmergencies } from './sim/shelter/expeditions';
 import { advanceTo, isFinished, markSeen } from './sim/shelter/shelter';
 import type { ShelterState } from './sim/shelter/types';
 
@@ -171,7 +173,30 @@ function switchTo(v: View): void {
   }
 }
 
+// ---------- Som ----------
+unlockOnGesture();
+const muteBtn = document.getElementById('mute')!;
+const paintMute = () => {
+  muteBtn.innerHTML = `<img class="ico" src="${iconUrl(isMuted() ? 'mute' : 'sound')}" alt=""/>`;
+  muteBtn.title = isMuted() ? 'Ligar o som' : 'Desligar o som';
+};
+paintMute();
+muteBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleMute();
+  paintMute();
+});
+// Todo botão do painel responde com um clique.
+document.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).closest('button, select, input[type=checkbox]')) sfx('click');
+});
+
+function ambience(): void {
+  if (shelter) setAmbience({ rain: shelter.raining, night: isNight(hourOfDay(shelter.hour)), raid: mode === 'raid' });
+}
+
 function render(): void {
+  ambience();
   if (mode === 'raid' || !shelter) return;
   markSeen(shelter);
   if (mode === 'shelter') {
@@ -187,7 +212,14 @@ function render(): void {
 // O relógio anda na tela; o servidor confirma a cada comando e a cada poucos minutos.
 setInterval(() => {
   if (!shelter || mode === 'raid') return;
+  // O que aconteceu nesta virada de hora decide o som: batida na porta, alarme, notícia boa ou ruim.
+  const before = { diary: shelter.diary.length, doors: shelter.dilemmas.length, alarms: pendingEmergencies(shelter).length };
   if (!advanceTo(shelter, Date.now())) return;
+  const news = shelter.diary.slice(before.diary);
+  if (pendingEmergencies(shelter).length > before.alarms) sfx('alert');
+  else if (shelter.dilemmas.length > before.doors) sfx('knock');
+  else if (news.some((e) => e.tone === 'bad')) sfx('bad');
+  else if (news.some((e) => e.tone === 'good')) sfx('good');
   if (isFinished(shelter)) showGameOver();
   render();
 }, 1000);
@@ -223,6 +255,7 @@ async function playRaid(req: RaidRequest): Promise<void> {
     shelterUi.detach();
     hint.textContent = 'Setas/WASD ou o direcional para mover · andar até uma porta abre · andar até um zumbi ataca · toque num container vizinho para procurar';
     raidUi.begin(ticket, (actions) => void endRaid(ticket.id, actions, back));
+    ambience();
     game.scene.start('raid');
   } catch (e) {
     shelterUi.setError((e as Error).message);

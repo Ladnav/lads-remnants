@@ -11,7 +11,17 @@ npm run balance   # simula 45 dias de comunidades (AFK x jogador casual)
 npm run build
 npm run deploy:edge   # empacota src/server e publica a Edge Function "game"
 npm run smoke:online  # teste ponta a ponta contra o Supabase
+npm run art           # gera a arte que falta pela API do Gemini (gasta créditos)
+npm run art -- --cost # só mostra quanto já foi gasto
 ```
+
+| Abrigo | Mapa da região |
+|---|---|
+| ![Abrigo](docs/screenshots/abrigo.png) | ![Mapa](docs/screenshots/mapa-pintado.jpg) |
+
+| Ficha de personagem | Grupo | Incursão |
+|---|---|---|
+| ![Ficha](docs/screenshots/ficha-personagem.jpg) | ![Grupo](docs/screenshots/grupo.jpg) | ![Incursão](docs/screenshots/incursao.jpg) |
 
 ### Online x offline
 Com `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` no `.env.local`, o jogo roda **online**: login anônimo e o servidor como autoridade. Sem essas variáveis, ou com `?offline` na URL, roda **offline** com as mesmas regras e save no navegador.
@@ -24,6 +34,10 @@ O `.env.local` (fora do git) guarda também a senha do banco e o ref do projeto 
   - `shelter/`: abrigo idle. Tick de 1h de jogo com necessidades, emoções, construção, expedições noturnas, visitantes na porta e ataques de madrugada.
 - `src/data/`: itens, recursos, receitas, locais, traços e sobreviventes.
 - `src/game/`: cenas Phaser (abrigo, mapa da região e incursão), HUDs e save local.
+  - `sprites.ts`: personagens desenhados por código. `icons.ts`: ícones em pixel art no lugar de emojis.
+  - `night.ts`: noite com focos de luz e chuva. `sound.ts`: som sintetizado com WebAudio.
+  - `art.ts`: endereços da arte pintada em `public/art/`.
+- `scripts/art.mjs`: gera a arte pintada. Originais em `art/raw/`, versões leves em `public/art/`, custo em `art/ledger.json`.
 - `src/server/game.ts`: regras de servidor (comandos, ingressos de incursão, reprodução do log de ações). Rodam no navegador (offline) e na Edge Function (online).
 - `src/net/`: backends local e Supabase.
 - `supabase/`: migração (tabela `shelters` com RLS só de leitura), Edge Function `game` e config de auth.
@@ -55,10 +69,22 @@ O `.env.local` (fora do git) guarda também a senha do banco e o ref do projeto 
   - Modo de espera: após 24h reais sem comando, o grupo consome menos e ninguém bate na porta.
   - Emergência: o encurralado aguenta 12h reais além da volta do grupo.
 
-- **Visual**: personagens em pixel art gerados por código (`src/game/sprites.ts`), com animação de andar. No abrigo seguem caminhos pelas portas; no mapa, o grupo anda pela rota. Galeria em `?sprites`.
+- **Repaginação visual**:
+  - Arte pintada, gerada no Gemini com um estilo fixo: retratos dos oito sobreviventes, ilustração dos cinco locais, telas de abertura, visitante, invasores e finais, e os cenários do abrigo e do mapa.
+  - Os cenários são pintados **sobre a planta exata do jogo** (`scripts/art-ref-shelter.mjs` desenha a do abrigo), então paredes, portas e caminhos não mudam. No abrigo, as paredes são recortes da própria pintura, para as pessoas passarem atrás delas. Se a pintura não carregar, o abrigo volta a ser desenhado por código.
+  - No mapa, cada local é um cartão com a foto do lugar preso ao ponto.
+  - Personagens desenhados por código com formas arredondadas (galeria em `?sprites`); ícones próprios em pixel art.
+  - Noite escura com focos de luz que tremem, chuva, e a incursão iluminada pela lanterna de quem entrou.
+  - Jogo desenhado em 3× a resolução lógica.
+- **Painel**: barra de status sempre à vista, quatro abas (Abrigo, Bancada, Mapa, Diário), ficha de personagem e tela do grupo.
+- **Celular**: uma coluna, abas embaixo, câmera próxima que anda com o dedo no abrigo e no mapa, e direcional na incursão.
+- **Som**: ambiente (vento, chuva, zumbido dentro dos prédios) e efeitos, sintetizados na hora, com botão de mudo no canto do jogo.
 - **Relações**: cada par de sobreviventes tem um laço que cresce com trabalho lado a lado, jantar na mesa e expedições juntos, e azeda com fome e mau humor. Amigos (💛) rendem mais na mesma tarefa, se protegem em expedição, seguram o humor e a deserção, e sofrem mais com a morte um do outro. Desafetos (⚡) fazem o contrário.
 - **Objetivo**: sair da cidade. Construir o rádio, decifrar a transmissão (36h de escuta noturna, sozinho) e juntar 6 de combustível mais comida e água para a estrada. Partir encerra a história com quem estiver vivo.
 
 Balanceamento atual (`npm run balance`, 40 sementes, até 45 dias): sem nenhuma visita, a comunidade dura cerca de 7 dias de jogo. Com uma única visita deixando ordens permanentes, cerca de 17 dias (8 dias reais). Um jogador casual simulado (2 visitas por dia, duas expedições por noite, sem incursões ativas) dura cerca de 29 dias, e só 1 em 40 consegue partir: sem incursões ativas faltam peças para o rádio.
+
+### Gasto com arte
+Cada chamada paga à API fica em `art/ledger.json`, com tokens e custo estimado pela tabela do Google. O script para de gerar ao chegar em `ART_BUDGET_USD` (padrão US$ 6, no `.env.local`). A API não informa saldo: o valor real está no painel do Google. Os próximos passos estão em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Controles da incursão: setas/WASD movem. Andar até uma porta abre, andar até um zumbi ataca. E procura, Espaço espera, X extrai, P/F abrem ou forçam portas trancadas, B faz curativo.

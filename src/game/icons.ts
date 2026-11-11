@@ -76,6 +76,8 @@ const ICONS: Record<string, string[]> = {
   car: ['..........', '..........', '...rrrr...', '..rwwrwr..', '.rrrrrrrr.', 'rrrrrrrrrr', 'ryrrrrrryr', '.GG....GG.', '.GG....GG.', '..........'],
   repeat: ['..........', '..bbbbbb..', '.b......b.', '.b.....bbb', '.b......b.', '.b......b.', 'bbb.....b.', '.b......b.', '..bbbbbb..', '..........'],
   heart: ['..........', '.yy...yy..', 'yyyy.yyyy.', 'yyyyyyyyy.', 'yyyyyyyyy.', '.yyyyyyy..', '..yyyyy...', '...yyy....', '....y.....', '..........'],
+  sound: ['....g.....', '...gg..w..', 'gggggg..w.', 'gggggg.w.w', 'gggggg.w.w', 'gggggg.w.w', 'gggggg..w.', '...gg..w..', '....g.....', '..........'],
+  mute: ['....g.....', '...gg.....', 'gggggg.r.r', 'gggggg..r.', 'gggggg.r.r', 'gggggg....', 'gggggg....', '...gg.....', '....g.....', '..........'],
   bolt: ['.....yy...', '....yy....', '...yy.....', '..yyyyyy..', '.....yy...', '....yy....', '...yy.....', '..yy......', '.y........', '..........'],
 };
 
