@@ -129,7 +129,14 @@ export class RaidScene extends Phaser.Scene {
         } else if (t.kind === 'exit') {
           const open = exitStatus(s, t.exitId ?? '') === 'open';
           const c = open ? 0xd9b45b : 0x6a6355;
-          if (t.exitId === 'roof') {
+          if (t.exitId === 'window') {
+            // Janela quebrada na parede de cima: buraco claro com cacos.
+            wall(g, x, y, true);
+            g.fillStyle(open ? 0x8a9aa0 : 0x3a3a3a).fillRect(px + 6, py - WALL_H + 6, TILE - 12, WALL_H - 4);
+            g.fillStyle(0x1a1a1a).fillTriangle(px + 6, py - WALL_H + 6, px + 13, py - WALL_H + 6, px + 6, py - WALL_H + 14);
+            g.fillStyle(0x1a1a1a).fillTriangle(px + TILE - 6, py + 2, px + TILE - 14, py + 2, px + TILE - 6, py - 8);
+            g.lineStyle(2, 0x4a3a2a).strokeRect(px + 6, py - WALL_H + 6, TILE - 12, WALL_H - 4);
+          } else if (t.exitId === 'roof') {
             // Escada encostada: dois trilhos e degraus subindo.
             box(g, px + 6, py + 18, 3, 4, 34, c);
             box(g, px + TILE - 9, py + 18, 3, 4, 34, c);
@@ -143,8 +150,8 @@ export class RaidScene extends Phaser.Scene {
         if (t.containerId !== undefined) {
           const c = s.containers[t.containerId];
           const empty = c.searched && c.items.length === 0;
-          const color = empty ? 0x3a3128 : (CONTAINER_COLOR[c.name] ?? 0x6b4f2a);
-          const h = c.name === 'Prateleira' || c.name === 'Armário' ? 18 : 11;
+          const color = empty ? 0x3a3128 : c.locked ? 0x4a5058 : (CONTAINER_COLOR[c.name] ?? 0x6b4f2a);
+          const h = c.name === 'Prateleira' || c.name === 'Armário' || c.locked || c.id === s.containers.length - 1 ? 18 : 11;
           g.fillStyle(0x000000, 0.3).fillRect(px + 5, py + TILE - 4, TILE - 6, 3);
           box(g, px + 3, py + 6, TILE - 6, TILE - 10, h, color);
           // O que distingue cada móvel, na frente dele.
@@ -161,7 +168,13 @@ export class RaidScene extends Phaser.Scene {
             g.lineStyle(1, line).lineBetween(px + 4, front + 4, px + TILE - 4, front + 4);
           }
           const topY = py + 6 - h + (TILE - 10) / 2;
-          if (!c.searched) g.fillStyle(0xd9b45b).fillCircle(px + TILE / 2, topY, 3);
+          if (c.locked) {
+            // Cofre: chapa de aço com fechadura dourada e brilho para chamar o olho.
+            g.fillStyle(0x2a2e33).fillRect(px + 7, front + 2, TILE - 14, h - 4);
+            g.fillStyle(0xe8c65e).fillCircle(px + TILE / 2, front + h / 2, 2.5);
+            g.lineStyle(1, 0xe8c65e, 0.9).strokeCircle(px + TILE / 2, topY, 4);
+            g.fillStyle(0xe8c65e).fillCircle(px + TILE / 2, topY, 2);
+          } else if (!c.searched) g.fillStyle(0xd9b45b).fillCircle(px + TILE / 2, topY, 3);
           else if (c.items.length) g.fillStyle(0xf1ebe0).fillCircle(px + TILE / 2, topY, 3);
         }
 
@@ -233,7 +246,7 @@ export class RaidScene extends Phaser.Scene {
     this.tweens.killTweensOf(c);
     a.faceDelta(p.x - c.x, p.y - c.y);
     a.setWalking(true);
-    this.tweens.add({ targets: c, x: p.x, y: p.y, duration: 160, ease: 'Sine.easeOut', onComplete: () => a.setWalking(false) });
+    this.tweens.add({ targets: c, x: p.x, y: p.y, duration: 140, ease: 'Linear', onComplete: () => a.setWalking(false) });
   }
 
   /** Ondas de ruído achatadas pela perspectiva. */

@@ -39,7 +39,9 @@ describe('geração do mapa', () => {
           expect(dist[i], `seed ${seed} tile ${i}`).toBeGreaterThanOrEqual(0);
         }
       });
-      expect(s.exits).toHaveLength(2);
+      expect(s.exits.length).toBeGreaterThanOrEqual(2);
+      expect(s.containers.filter((c) => c.locked)).toHaveLength(1);
+      expect(s.containers.filter((c) => c.items.includes('vault_key'))).toHaveLength(1);
       expect(s.containers.length).toBeGreaterThan(0);
     }
   });
@@ -117,6 +119,7 @@ describe('estresse', () => {
           : roll === 3 ? { type: 'extract' }
           : roll === 4 ? { type: 'drop', index: 0 }
           : roll === 5 ? { type: 'use', index: 0 }
+          : roll === 6 && near ? { type: 'crack', containerId: near.id }
           : { type: 'move', dx: d.x, dy: d.y };
         applyAction(s, a);
         expect(s.survivor.hp).toBeLessThanOrEqual(s.survivor.maxHp);
@@ -133,3 +136,59 @@ function findFreeNeighbour(s: RaidState, p: { x: number; y: number }) {
   }
   throw new Error('sem vizinho livre');
 }
+
+describe('prêmio trancado e janela estreita', () => {
+  const plain = { ...lena, traits: [] };
+  const besideVault = (s: RaidState) => {
+    const v = s.containers.find((c) => c.locked)!;
+    for (const d of DIRS) {
+      const t = s.tiles[idx(s, v.pos.x + d.x, v.pos.y + d.y)];
+      if (t.kind === 'floor' && t.containerId === undefined) {
+        s.player = { x: v.pos.x + d.x, y: v.pos.y + d.y };
+        s.zombies = [];
+        return v;
+      }
+    }
+    throw new Error('cofre sem acesso');
+  };
+
+  it('sem chave o cofre não abre; com a chave abre sem barulho', () => {
+    const s = createRaid(5, plain);
+    const v = besideVault(s);
+    const turn = s.turn;
+    applyAction(s, { type: 'search', containerId: v.id });
+    expect(v.searched).toBe(false);
+    expect(s.turn).toBe(turn);
+    s.backpack.push('vault_key');
+    applyAction(s, { type: 'search', containerId: v.id });
+    expect(v.locked).toBe(false);
+    expect(v.searched).toBe(true);
+    expect(s.backpack).not.toContain('vault_key');
+  });
+
+  it('arrombar exige pé de cabra (ou ser mecânico)', () => {
+    const s = createRaid(6, plain);
+    const v = besideVault(s);
+    applyAction(s, { type: 'crack', containerId: v.id });
+    expect(v.locked).toBe(true);
+    s.backpack.push('crowbar');
+    applyAction(s, { type: 'crack', containerId: v.id });
+    expect(v.locked).toBe(false);
+    expect(v.searched).toBe(true);
+    expect(s.turn).toBe(2);
+  });
+
+  it('pela janela só passa quem carrega até 4 kg', () => {
+    let seed = 1;
+    let s = createRaid(seed, plain);
+    while (!s.exits.some((e) => e.id === 'window')) s = createRaid(++seed, plain);
+    const w = s.exits.find((e) => e.id === 'window')!;
+    s.player = { ...w.pos };
+    s.backpack = ['fuel', 'scrap'];
+    applyAction(s, { type: 'extract' });
+    expect(s.status).toBe('active');
+    s.backpack = ['fuel'];
+    applyAction(s, { type: 'extract' });
+    expect(s.status).toBe('extracted');
+  });
+});

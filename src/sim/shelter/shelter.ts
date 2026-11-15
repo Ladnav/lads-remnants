@@ -558,7 +558,7 @@ export function applyRaidResult(s: ShelterState, id: string, r: RaidOutcome, loc
     die(s, v, `${v.name} entrou em ${loc.name} e não saiu mais.`);
     return;
   }
-  const loot = r.items.filter((it) => it !== 'map_note');
+  const loot = r.items.filter((it) => it !== 'map_note' && it !== 'vault_key');
   for (const it of loot) addResources(s, ITEM_TO_RESOURCES[it]);
   const found: ItemId[] = [...loot];
   for (const it of carried) {

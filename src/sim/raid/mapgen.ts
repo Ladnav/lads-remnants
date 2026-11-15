@@ -26,6 +26,8 @@ export interface GeneratedMap {
 }
 
 export const ROOF_OPENS_AT = 12;
+/** A janela quebrada é estreita: só passa quem carrega pouco. */
+export const WINDOW_MAX_WEIGHT = 4;
 export const ROOF_CLOSES_AT = 28;
 
 export interface SiteOptions {
@@ -38,7 +40,11 @@ export interface SiteOptions {
   specials?: number;
   /** Esconde um mapa rabiscado num container (revela um novo local no abrigo). */
   mapNote?: boolean;
+  /** O prêmio trancado do local. Sem isto, um cofre genérico. */
+  prize?: { name: string; loot: readonly ItemId[] };
 }
+
+const DEFAULT_PRIZE = { name: 'Cofre', loot: ['medicine', 'ammo', 'components', 'parts', 'canned_food'] as readonly ItemId[] };
 
 /** Gera um prédio abandonado: salas por BSP, portas (algumas trancadas), containers e zumbis. */
 export function generateSite(r: RngState, opts: SiteOptions = {}): GeneratedMap {
@@ -118,6 +124,60 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
     { id: 'entry', name: 'Entrada', pos: { x: ex, y: height - 1 }, opensAt: 0, closesAt: null },
     { id: 'roof', name: 'Escada do telhado', pos: roof, opensAt: ROOF_OPENS_AT, closesAt: ROOF_CLOSES_AT },
   ];
+
+  // Janela quebrada na parede de cima: sempre aberta, mas só passa quem carrega pouco.
+  const windows: number[] = [];
+  for (let x = 2; x < width - 2; x++) {
+    const below = idx(g, x, 1);
+    const t = tiles[below];
+    if (t.kind !== 'floor' || t.containerId !== undefined || dist[below] < 10) continue;
+    if (Math.abs(x - roof.x) + Math.abs(1 - roof.y) < 5) continue;
+    windows.push(x);
+  }
+  if (windows.length) {
+    const wx = pick(r, windows);
+    tiles[idx(g, wx, 0)] = { kind: 'exit', exitId: 'window' };
+    exits.push({ id: 'window', name: 'Janela quebrada', pos: { x: wx, y: 0 }, opensAt: 0, closesAt: null, maxWeight: WINDOW_MAX_WEIGHT });
+  }
+
+  // O prêmio: um móvel trancado no fundo do prédio. A chave fica noutro container.
+  const prize = opts.prize ?? DEFAULT_PRIZE;
+  const prizeSpots: Vec[] = [];
+  for (let i = 0; i < tiles.length; i++) {
+    const t = tiles[i];
+    if (t.kind !== 'floor' || t.containerId !== undefined || dist[i] < 12) continue;
+    const x = i % width;
+    const y = Math.floor(i / width);
+    const nb = DIRS.map((d) => tiles[idx(g, x + d.x, y + d.y)]);
+    if (!nb.some((n) => n.kind === 'wall')) continue;
+    if (nb.some((n) => n.kind === 'door' || n.kind === 'exit' || n.containerId !== undefined)) continue;
+    // Bloquear este piso não pode isolar nada: exige pelo menos dois vizinhos livres em volta.
+    if (nb.filter((n) => n.kind === 'floor' && n.containerId === undefined).length < 2) continue;
+    prizeSpots.push({ x, y });
+  }
+  if (!prizeSpots.length || !containers.length) return null;
+  prizeSpots.sort((a, b) => dist[idx(g, b.x, b.y)] - dist[idx(g, a.x, a.y)]);
+  const vault = pick(r, prizeSpots.slice(0, 6));
+  const vaultId = containers.length;
+  // Local saqueado: o prêmio também foi mexido, mas sempre sobra alguma coisa.
+  const prizeCount = Math.max(1, Math.round(randInt(r, 4, 5) * Math.min(1, opts.lootScale ?? 1)));
+  containers.push({
+    id: vaultId,
+    pos: vault,
+    name: prize.name,
+    searched: false,
+    locked: true,
+    items: Array.from({ length: prizeCount }, () => pick(r, prize.loot)),
+  });
+  tiles[idx(g, vault.x, vault.y)].containerId = vaultId;
+  // Ainda dá para chegar em tudo?
+  const after = bfsDistances(g, start, isWalkableForPath);
+  for (let i = 0; i < tiles.length; i++) {
+    const t = tiles[i];
+    if ((t.kind === 'floor' || t.kind === 'door') && t.containerId === undefined && after[i] < 0) return null;
+  }
+  if (!DIRS.some((d) => after[idx(g, vault.x + d.x, vault.y + d.y)] >= 0)) return null;
+  pick(r, containers.slice(0, vaultId)).items.push('vault_key');
 
   const freeFloor = (minDist: number): Vec[] => {
     const out: Vec[] = [];

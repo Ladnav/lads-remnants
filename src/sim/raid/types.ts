@@ -25,6 +25,8 @@ export interface Container {
   name: string;
   searched: boolean;
   items: ItemId[];
+  /** Prêmio trancado: abre com a chave do cofre ou arrombando. */
+  locked?: boolean;
 }
 
 export type ZombieState = 'idle' | 'investigating' | 'chasing';
@@ -45,6 +47,8 @@ export interface Exit {
   pos: Vec;
   opensAt: number;
   closesAt: number | null;
+  /** Passagem estreita: só passa quem carrega até este peso. */
+  maxWeight?: number;
 }
 
 export interface RaidSurvivor {
@@ -105,6 +109,7 @@ export type Action =
   | { type: 'pick'; x: number; y: number }
   | { type: 'force'; x: number; y: number }
   | { type: 'throw'; x: number; y: number }
+  | { type: 'crack'; containerId: number }
   | { type: 'extract' };
 
 export type EventTone = 'info' | 'good' | 'warn' | 'bad';

@@ -10,7 +10,8 @@ export type ItemId =
   | 'fuel'
   | 'crowbar'
   | 'components'
-  | 'map_note';
+  | 'map_note'
+  | 'vault_key';
 
 export interface ItemDef {
   name: string;
@@ -32,6 +33,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   crowbar: { name: 'Pé de cabra', weight: 2, value: 4, icon: '🔧' },
   components: { name: 'Componentes eletrônicos', weight: 1, value: 8, icon: '📟' },
   map_note: { name: 'Mapa rabiscado', weight: 0, value: 0, icon: '🗺️' },
+  vault_key: { name: 'Chave do cofre', weight: 0, value: 0, icon: '🗝️' },
 };
 
 export interface ContainerDef {

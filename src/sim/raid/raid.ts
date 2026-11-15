@@ -32,6 +32,8 @@ const NOISE = {
   forceCrowbar: 5,
   bash: 3,
   rock: 5,
+  crack: 6,
+  crackQuiet: 2,
 } as const;
 
 export const START_ROCKS = 2;
@@ -120,6 +122,28 @@ export function hasCrowbar(state: RaidState): boolean {
   return state.backpack.includes('crowbar');
 }
 
+export function hasKey(state: RaidState): boolean {
+  return state.backpack.includes('vault_key');
+}
+
+/** Como abrir o prêmio sem a chave: pé de cabra (rápido, barulhento) ou mãos de mecânico (lento, quieto). */
+export function crackPlan(state: RaidState): { turns: number; noise: number } | null {
+  if (hasCrowbar(state)) return { turns: 2, noise: NOISE.crack };
+  if (hasTrait(state, 'mecanico')) return { turns: 4, noise: NOISE.crackQuiet };
+  return null;
+}
+
+/** Dá para sair por aqui agora? Devolve o motivo quando não dá. */
+export function exitBlocked(state: RaidState, exitId: string): string | null {
+  const e = state.exits.find((x) => x.id === exitId);
+  if (!e) return 'Não há saída aqui.';
+  if (exitStatus(state, exitId) !== 'open') return `${e.name} não está acessível agora.`;
+  if (e.maxWeight !== undefined && carriedWeight(state) > e.maxWeight) {
+    return `Você não passa pela ${e.name.toLowerCase()} com essa mochila. Só com até ${e.maxWeight} kg.`;
+  }
+  return null;
+}
+
 export function exitStatus(state: RaidState, exitId: string): 'open' | 'soon' | 'closed' {
   const e = state.exits.find((x) => x.id === exitId);
   if (!e) return 'closed';
@@ -197,6 +221,15 @@ export function applyAction(state: RaidState, action: Action): RaidEvent[] {
     case 'search': {
       const c = state.containers[action.containerId];
       if (!c || c.searched || chebyshev(c.pos, state.player) !== 1) break;
+      if (c.locked) {
+        if (!hasKey(state)) {
+          say(`${c.name}: trancado. A chave deve estar em algum lugar do prédio.`, 'warn');
+          break;
+        }
+        state.backpack.splice(state.backpack.indexOf('vault_key'), 1);
+        c.locked = false;
+        say(`A chave gira. ${c.name} se abre sem um ruído.`, 'good');
+      }
       c.searched = true;
       say(
         c.items.length
@@ -271,11 +304,31 @@ export function applyAction(state: RaidState, action: Action): RaidEvent[] {
       endTurn(state, ev, [{ pos: { x: action.x, y: action.y }, radius: NOISE.rock }]);
       break;
     }
+    case 'crack': {
+      const c = state.containers[action.containerId];
+      if (!c || !c.locked || chebyshev(c.pos, state.player) !== 1) break;
+      const plan = crackPlan(state);
+      if (!plan) {
+        say('Sem pé de cabra não dá para arrombar isso.', 'warn');
+        break;
+      }
+      say(plan.noise > NOISE.crackQuiet ? `Você enfia o pé de cabra em ${c.name.toLowerCase()}. O metal geme alto.` : `Você trabalha na fechadura de ${c.name.toLowerCase()} com calma…`, 'warn');
+      if (plan.noise > NOISE.crackQuiet) state.nextSpawnTurn = Math.max(state.turn + 1, state.nextSpawnTurn - 2);
+      for (let i = 0; i < plan.turns && state.status === 'active'; i++) {
+        endTurn(state, ev, [{ pos: { ...c.pos }, radius: plan.noise }]);
+      }
+      if (state.status !== 'active') break;
+      c.locked = false;
+      c.searched = true;
+      say(`${c.name} cede: ${c.items.map((i) => ITEMS[i].name).join(', ')}.`, 'good');
+      break;
+    }
     case 'extract': {
       const e = exitAt(state, state.player);
       if (!e) break;
-      if (exitStatus(state, e.id) !== 'open') {
-        say(`${e.name} não está acessível agora.`, 'warn');
+      const blocked = exitBlocked(state, e.id);
+      if (blocked) {
+        say(blocked, 'warn');
         break;
       }
       state.status = 'extracted';
