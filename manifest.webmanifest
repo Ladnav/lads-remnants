@@ -1,0 +1,30 @@
+{
+  "name": "Lads Remnants",
+  "short_name": "Remnants",
+  "description": "Sobrevivência num apocalipse zumbi: um abrigo que segue vivo com o jogo fechado e incursões táticas por turnos.",
+  "lang": "pt-BR",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0b0b",
+  "theme_color": "#0f0e0c",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
