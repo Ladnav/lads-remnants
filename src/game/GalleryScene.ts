@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { RES, sharpText } from './oblique';
+import { sharpText } from './oblique';
 import { RECRUITS, SURVIVORS } from '../data/survivors';
 import { ZOMBIES, type ZombieKind } from '../data/zombies';
 import { Actor, preloadBodies, survivorLook, zombieLook, type Facing, type Look } from './sprites';
@@ -17,7 +17,7 @@ export class GalleryScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor('#2a2823').setOrigin(0, 0).setZoom(RES);
+    this.cameras.main.setBackgroundColor('#2a2823').setOrigin(0, 0).setZoom(Math.max(1, Math.round(window.devicePixelRatio * 2)));
     sharpText(this);
     const cast: { name: string; look: Look }[] = [
       ...[...SURVIVORS, ...RECRUITS].map((d) => ({ name: d.name, look: survivorLook(d.id) })),

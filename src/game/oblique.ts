@@ -8,8 +8,18 @@ import Phaser from 'phaser';
  */
 export const TILE = 28;
 export const WALL_H = 14;
-/** O canvas tem RES vezes a resolução lógica: a pintura precisa de pixels para não borrar. */
-export const RES = 3;
+/**
+ * Nitidez de pixel art: o canvas tem os pixels FÍSICOS da área do jogo (main.ts) e a câmera amplia
+ * sempre por um número inteiro. Assim cada pixel do jogo vira um quadrado inteiro na tela, sem o
+ * navegador reamostrar nada. Ampliação de uma cena de w×h num canvas cw×ch, com reforço em tela estreita.
+ */
+export function cameraZoom(scene: Phaser.Scene, w: number, h: number, boost = 1): number {
+  const fit = Math.min(scene.scale.width / w, scene.scale.height / (h + WALL_H));
+  return Math.max(1, Math.round(fit * boost));
+}
+
+/** Tela estreita (celular): a cena inteira não cabe legível, então aproxima e anda com o dedo. */
+const narrow = (): boolean => window.matchMedia('(max-width: 900px)').matches;
 
 /** Profundidade de uma linha do grid; objetos da mesma linha usam frações dela. */
 export const rowDepth = (row: number, layer = 0): number => 10 + row * 10 + layer;
@@ -20,31 +30,55 @@ export function shade(color: number, f: number): number {
   return Phaser.Display.Color.GetColor(adj(c.red), adj(c.green), adj(c.blue));
 }
 
-/** Câmera deslocada para caber o topo das paredes da primeira linha. */
-export function setupObliqueCamera(scene: Phaser.Scene): void {
-  scene.cameras.main.setOrigin(0, 0).setZoom(RES).setScroll(0, -WALL_H);
-  sharpText(scene);
-}
-
 /** Quanto a câmera aproxima em tela estreita. */
 const NARROW_ZOOM = 1.8;
-/** Arrasto menor que isto (em pixels do canvas) ainda conta como toque. */
-export const TAP_SLOP = 10 * RES;
+/** Arrasto menor que isto (em pixels do canvas, que são físicos) ainda conta como toque. */
+export const TAP_SLOP = 10 * (window.devicePixelRatio || 1);
 
 /**
- * Em tela estreita a cena inteira não cabe legível: a câmera aproxima, começa em `focus`
- * e anda com o dedo. Em tela larga não faz nada. Devolve se a câmera ficou solta.
+ * Enquadra uma cena w×h com ampliação inteira. Se couber, fica centrada; se não couber (celular, ou
+ * tela de densidade alta), começa em `focus` e anda com o dedo. Refaz sozinha quando o canvas muda.
  */
-export function enablePan(scene: Phaser.Scene, w: number, h: number, focus: { x: number; y: number }): boolean {
-  if (!window.matchMedia('(max-width: 900px)').matches) return false;
+export function setupObliqueCamera(scene: Phaser.Scene, w = 0, h = 0, focus?: { x: number; y: number }): void {
+  sharpText(scene);
   const cam = scene.cameras.main;
-  cam.setOrigin(0.5, 0.5).setZoom(RES * NARROW_ZOOM).setBounds(0, -WALL_H, w, h + WALL_H).centerOn(focus.x, focus.y);
+  const fit = (): void => {
+    const W = w || scene.scale.width;
+    const H = h || scene.scale.height - WALL_H;
+    const z = cameraZoom(scene, W, H, narrow() ? NARROW_ZOOM : 1);
+    cam.setOrigin(0.5, 0.5).setZoom(z);
+    const fits = W * z <= scene.scale.width + 1 && (H + WALL_H) * z <= scene.scale.height + 1;
+    if (fits) cam.removeBounds().centerOn(W / 2, (H - WALL_H) / 2);
+    else cam.setBounds(0, -WALL_H, W, H + WALL_H).centerOn(focus?.x ?? W / 2, focus?.y ?? H / 2);
+    (scene as Phaser.Scene & { panning?: boolean }).panning = !fits;
+  };
+  fit();
+  scene.scale.on('resize', fit);
+  scene.events.once('shutdown', () => scene.scale.off('resize', fit));
+  // Arrastar move a câmera quando a cena não cabe inteira.
   scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-    if (!p.isDown) return;
+    if (!p.isDown || !(scene as Phaser.Scene & { panning?: boolean }).panning) return;
     cam.scrollX -= (p.x - p.prevPosition.x) / cam.zoom;
     cam.scrollY -= (p.y - p.prevPosition.y) / cam.zoom;
   });
-  return true;
+}
+
+/** Mantido por compatibilidade: o enquadramento agora é todo em setupObliqueCamera. */
+export function enablePan(scene: Phaser.Scene, w: number, h: number, focus: { x: number; y: number }): boolean {
+  setupObliqueCamera(scene, w, h, focus);
+  return !!(scene as Phaser.Scene & { panning?: boolean }).panning;
+}
+
+/**
+ * As pinturas que ainda restam (abrigo, mapa, personagens pintados) ficam com filtro suave até serem
+ * trocadas por pixel art; com o filtro de pixel elas serrilham ao serem reduzidas.
+ */
+export function smoothPainted(scene: Phaser.Scene): void {
+  for (const key of scene.textures.getTextureKeys()) {
+    if (/^(body-|prop-|shelter-bg|region-map|soft-shadow|shelter-light|mote)/.test(key)) {
+      scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
+    }
+  }
 }
 
 /** Todo texto criado na cena nasce na resolução do canvas, senão fica borrado com o zoom. */
@@ -53,7 +87,7 @@ export function sharpText(scene: Phaser.Scene): void {
   if (add.sharp) return;
   add.sharp = true;
   const make = add.text.bind(add);
-  add.text = (...args: Parameters<typeof make>) => make(...args).setResolution(RES + 1);
+  add.text = (...args: Parameters<typeof make>) => make(...args).setResolution(4);
 }
 
 /**

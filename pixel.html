@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Lads Remnants · prova de pixel art</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #111113; color: #d6cfc1; font-family: 'Pixelify Sans', monospace; }
+      body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+      #game canvas { display: block; image-rendering: pixelated; }
+      .bar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; padding: 0 16px; }
+      button { font: inherit; font-size: 16px; background: #292a2b; color: #d6cfc1; border: 2px solid #6c4f34; padding: 6px 12px; box-shadow: inset -2px -2px 0 #111113, inset 2px 2px 0 #59544c; cursor: pointer; }
+      button:active { box-shadow: inset 2px 2px 0 #111113; }
+      .hint { font-size: 14px; color: #8c8575; text-align: center; padding: 0 16px; }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div class="bar">
+      <button id="night">🌙 Noite</button>
+      <button id="zoom">🔍 Zoom</button>
+    </div>
+    <p class="hint">Prova de estilo · setas ou toque para andar com a Marta</p>
+    <script type="module" src="/src/pixel/main.ts"></script>
+  </body>
+</html>

@@ -4,7 +4,7 @@ import { RESOURCES, type ResourceId } from './data/shelter';
 import { banner, faceLargeUrl, faceUrl } from './game/art';
 import { GalleryScene } from './game/GalleryScene';
 import { iconUrl, iconize } from './game/icons';
-import { RES, TILE, WALL_H } from './game/oblique';
+import { TILE, WALL_H } from './game/oblique';
 import { RaidScene } from './game/RaidScene';
 import { RaidUi } from './game/raidUi';
 import { RegionScene } from './game/RegionScene';
@@ -115,14 +115,29 @@ const shelterUi = new ShelterUi({ hud, top: topbar, ticker }, {
 const raidUi = new RaidUi(raidScene, hud, overlay, topbar, ticker);
 regionScene.setSelectHandler((id) => shelterUi.select(id));
 
+/**
+ * O canvas tem exatamente os pixels físicos da área do jogo (largura do contêiner × densidade da tela),
+ * na proporção do mundo. As cenas ampliam por número inteiro (oblique.ts): pixel art sem borrar.
+ */
+const WORLD_W = MAP_W * TILE;
+const WORLD_H = MAP_H * TILE + WALL_H;
+function canvasSize(): { w: number; h: number; dpr: number } {
+  const dpr = window.devicePixelRatio || 1;
+  const css = document.getElementById('game')!.clientWidth || WORLD_W;
+  const w = Math.max(320, Math.floor(css * dpr));
+  return { w, h: Math.floor((w * WORLD_H) / WORLD_W), dpr };
+}
+const first = canvasSize();
+
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: MAP_W * TILE * RES,
-  height: (MAP_H * TILE + WALL_H) * RES,
+  width: first.w,
+  height: first.h,
   backgroundColor: '#070707',
-  // A pintura usa filtro suave; os bonecos de pixel art pedem o filtro deles (ver sprites.ts).
-  pixelArt: false,
+  pixelArt: true,
+  roundPixels: true,
+  scale: { mode: Phaser.Scale.NONE },
   scene: [],
   callbacks: {
     postBoot: (g) => {
@@ -141,6 +156,17 @@ const game = new Phaser.Game({
     },
   },
 });
+
+/** Acompanha a largura do contêiner e a densidade da tela (zoom do navegador, troca de monitor). */
+function fitCanvas(): void {
+  const { w, h, dpr } = canvasSize();
+  if (w !== game.scale.width || h !== game.scale.height) game.scale.resize(w, h);
+  game.canvas.style.width = `${w / dpr}px`;
+  game.canvas.style.height = `${h / dpr}px`;
+}
+game.events.once(Phaser.Core.Events.READY, fitCanvas);
+new ResizeObserver(() => fitCanvas()).observe(document.getElementById('game')!);
+window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener?.('change', fitCanvas);
 
 function adopt(s: ShelterState): void {
   shelter = s;

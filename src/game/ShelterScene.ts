@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState, ShelterSurvivor } from '../sim/shelter/types';
-import { TILE, WALL_H, box, enablePan, feet, rowDepth, setupObliqueCamera, wall } from './oblique';
+import { TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, smoothPainted, wall } from './oblique';
 import { artUrl } from './art';
 import { ensureIcon, iconFor } from './icons';
 import { NightLight, makeRain, softShadow, type LightSource, type OpenArea } from './night';
@@ -188,9 +188,9 @@ export class ShelterScene extends Phaser.Scene {
     this.sprites.clear();
     this.populated = false;
     this.decor = [];
-    setupObliqueCamera(this);
-    // No celular começa olhando para a sala, perto da porta.
-    enablePan(this, W * TILE, H * TILE, { x: 10 * TILE, y: 12 * TILE });
+    // Se a casa não couber inteira (celular), começa olhando para a sala, perto da porta.
+    setupObliqueCamera(this, W * TILE, H * TILE, { x: 10 * TILE, y: 12 * TILE });
+    smoothPainted(this);
     this.painted = [...PROPS, 'shelter-bg'].every((k) => this.textures.exists(k) && this.textures.get(k).key !== '__MISSING');
     if (this.painted) this.buildPainted();
     this.floor = this.add.graphics().setDepth(1);

@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { idx } from '../sim/raid/grid';
+import { idx, isOpaque } from '../sim/raid/grid';
 import { computeVisible, exitStatus } from '../sim/raid/raid';
 import type { RaidState, Tile, Vec } from '../sim/raid/types';
 import { NightLight, type LightSource } from './night';
-import { RES, TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, shade, wall } from './oblique';
+import { TILE, WALL_H, box, cameraZoom, feet, rowDepth, shade, sharpText, smoothPainted, wall } from './oblique';
 import { Actor, preloadBodies, survivorLook, zombieLook } from './sprites';
 
 export { TILE } from './oblique';
@@ -27,6 +27,7 @@ export class RaidScene extends Phaser.Scene {
   private zombies = new Map<number, Actor>();
   private alerts = new Map<number, Phaser.GameObjects.Text>();
   private dark: NightLight | null = null;
+  private state: RaidState | null = null;
   private onTileClick: (p: Vec) => void = () => {};
   private onReady: () => void;
 
@@ -40,7 +41,8 @@ export class RaidScene extends Phaser.Scene {
   }
 
   create(): void {
-    setupObliqueCamera(this);
+    sharpText(this);
+    smoothPainted(this);
     this.player = null;
     this.zombies.clear();
     this.alerts.clear();
@@ -189,11 +191,19 @@ export class RaidScene extends Phaser.Scene {
     this.rippleNoises(s, vis);
 
     // Lá dentro é escuro: a lanterna ilumina em volta de quem entrou, e as saídas abertas deixam luz passar.
-    this.dark ??= new NightLight(this, s.width * TILE, s.height * TILE + WALL_H);
+    this.dark ??= new NightLight(this, s.width * TILE, s.height * TILE + WALL_H, {
+      tile: TILE,
+      cols: s.width,
+      rows: s.height,
+      opaque: (tx, ty) => isOpaque(this.state!.tiles[idx(this.state!, tx, ty)]),
+    });
+    this.state = s;
     const me = feet(s.player.x, s.player.y);
     const lights: LightSource[] = [{ x: me.x, y: me.y - 8, r: 165 }];
     for (const e of s.exits) if (exitStatus(s, e.id) === 'open') lights.push({ x: e.pos.x * TILE + TILE / 2, y: e.pos.y * TILE + TILE / 2, r: 60 });
-    this.dark.set(0.6, lights);
+    // As portas mudam as sombras: a assinatura leva o estado delas.
+    const doors = s.tiles.reduce((acc, t, i) => (t.kind === 'door' && isOpaque(t) ? acc + i + ',' : acc), '');
+    this.dark.set(0.6, lights, [], doors);
   }
 
   private drawActors(s: RaidState, vis: boolean[]): void {
@@ -201,12 +211,15 @@ export class RaidScene extends Phaser.Scene {
       this.player = new Actor(this, survivorLook(this.playerId));
       const p = feet(s.player.x, s.player.y);
       this.player.container.setPosition(p.x, p.y);
-      // Câmera próxima, seguindo o sobrevivente: a névoa esconde o resto mesmo.
+      // Câmera próxima, seguindo o sobrevivente: a névoa esconde o resto mesmo. Ampliação inteira.
+      const fit = () => this.cameras.main.setZoom(cameraZoom(this, s.width * TILE, s.height * TILE, 1.7));
       this.cameras.main
         .setBounds(0, -WALL_H, s.width * TILE, s.height * TILE + WALL_H)
         .setOrigin(0.5, 0.5)
-        .setZoom(1.7 * RES)
         .startFollow(this.player.container, true, 0.12, 0.12, 0, 10);
+      fit();
+      this.scale.on('resize', fit);
+      this.events.once('shutdown', () => this.scale.off('resize', fit));
     }
     this.moveTo(this.player, s.player);
     if (s.status === 'dead') {

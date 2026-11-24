@@ -554,6 +554,60 @@
       "textTokens": 389,
       "imageTokens": 1120,
       "usd": 0.1395
+    },
+    {
+      "at": "2026-11-24T01:59:49.863Z",
+      "job": "pixel-shelter",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 609,
+      "textTokens": 742,
+      "imageTokens": 1120,
+      "usd": 0.1445
+    },
+    {
+      "at": "2026-11-24T02:00:04.628Z",
+      "job": "pixel-characters",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 291,
+      "textTokens": 560,
+      "imageTokens": 1120,
+      "usd": 0.1417
+    },
+    {
+      "at": "2026-11-24T02:00:20.007Z",
+      "job": "pixel-raid",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 231,
+      "textTokens": 477,
+      "imageTokens": 1120,
+      "usd": 0.1406
+    },
+    {
+      "at": "2026-11-24T02:05:30.817Z",
+      "job": "pixel-props",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 318,
+      "textTokens": 637,
+      "imageTokens": 1120,
+      "usd": 0.1427
+    },
+    {
+      "at": "2026-11-24T02:05:46.910Z",
+      "job": "pixel-marta",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 338,
+      "textTokens": 756,
+      "imageTokens": 1120,
+      "usd": 0.1441
+    },
+    {
+      "at": "2026-11-24T02:25:03.263Z",
+      "job": "pixel-props2",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 434,
+      "textTokens": 964,
+      "imageTokens": 1120,
+      "usd": 0.1468
     }
   ]
 }

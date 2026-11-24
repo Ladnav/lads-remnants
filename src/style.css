@@ -44,12 +44,13 @@ body {
   min-width: 0;
 }
 
+/* O tamanho em CSS vem de main.ts (pixels físicos ÷ densidade): nada de esticar, senão borra. */
 #game canvas {
   display: block;
-  border: 1px solid var(--line);
+  outline: 1px solid var(--line);
   border-radius: 6px;
-  width: 100% !important;
-  height: auto !important;
+  max-width: 100%;
+  image-rendering: pixelated;
   touch-action: manipulation;
 }
 

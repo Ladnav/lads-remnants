@@ -5,7 +5,7 @@ import type { ShelterState } from '../sim/shelter/types';
 import { artUrl } from './art';
 import { ensureIcon, iconFor } from './icons';
 import { NightLight, makeRain, type LightSource } from './night';
-import { TAP_SLOP, TILE, WALL_H, enablePan, setupObliqueCamera } from './oblique';
+import { TAP_SLOP, TILE, WALL_H, setupObliqueCamera, smoothPainted } from './oblique';
 import { Actor, preloadBodies, survivorLook } from './sprites';
 
 const W = 28;
@@ -60,9 +60,9 @@ export class RegionScene extends Phaser.Scene {
     this.ready = true;
     this.events.once('shutdown', () => (this.ready = false));
     this.labels = [];
-    setupObliqueCamera(this);
-    // No celular começa olhando para o abrigo e os locais mais próximos.
-    enablePan(this, W * TILE, H * TILE, { x: (SHELTER_POS[0] + 3) * TILE, y: (SHELTER_POS[1] - 4) * TILE });
+    // Se o mapa não couber inteiro (celular), começa olhando para o abrigo e os locais mais próximos.
+    setupObliqueCamera(this, W * TILE, H * TILE, { x: (SHELTER_POS[0] + 3) * TILE, y: (SHELTER_POS[1] - 4) * TILE });
+    smoothPainted(this);
     this.drawCity();
     this.gfx = this.add.graphics().setDepth(20);
     this.routes = this.add.graphics().setDepth(30);
