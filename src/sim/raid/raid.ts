@@ -72,7 +72,8 @@ export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {
     exits: map.exits,
     spawns: map.spawns,
     nextZombieId: map.zombies.length,
-    nextSpawnTurn: 8,
+    nextSpawnTurn: 8 + (opts.calm ?? 0),
+    calm: opts.calm ?? 0,
     pendingNoises: [],
     lastNoises: [],
     kills: 0,
@@ -436,7 +437,8 @@ function endTurn(state: RaidState, ev: RaidEvent[], noises: Noise[]): void {
 
   if (state.status === 'active' && state.turn >= state.nextSpawnTurn) {
     spawnZombie(state, ev);
-    state.nextSpawnTurn = state.turn + Math.max(3, 8 - Math.floor(state.turn / 8));
+    const calm = state.calm ?? 0;
+    state.nextSpawnTurn = state.turn + Math.max(3 + Math.floor(calm / 2), 8 + calm - Math.floor(state.turn / 8));
   }
 
   const roof = state.exits.find((e) => e.id === 'roof');

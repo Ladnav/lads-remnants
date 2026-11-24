@@ -42,6 +42,8 @@ export interface SiteOptions {
   mapNote?: boolean;
   /** O prêmio trancado do local. Sem isto, um cofre genérico. */
   prize?: { name: string; loot: readonly ItemId[] };
+  /** Turnos a mais entre as levas de zumbis (local calmo). Padrão 0. */
+  calm?: number;
 }
 
 const DEFAULT_PRIZE = { name: 'Cofre', loot: ['medicine', 'ammo', 'components', 'parts', 'canned_food'] as readonly ItemId[] };
@@ -177,7 +179,19 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
     if ((t.kind === 'floor' || t.kind === 'door') && t.containerId === undefined && after[i] < 0) return null;
   }
   if (!DIRS.some((d) => after[idx(g, vault.x + d.x, vault.y + d.y)] >= 0)) return null;
-  pick(r, containers.slice(0, vaultId)).items.push('vault_key');
+  // A chave fica perto da entrada: quem entra costuma achá-la, e aí decide se vale largar coisa
+  // da mochila para ir até o fundo abrir o prêmio.
+  /** Distância a pé da entrada até o piso livre mais perto do móvel. */
+  const nearestDist = (p: Vec): number => {
+    let best = Infinity;
+    for (const d of DIRS) {
+      const v = after[idx(g, p.x + d.x, p.y + d.y)];
+      if (v >= 0 && v < best) best = v;
+    }
+    return best;
+  };
+  const nearFirst = containers.slice(0, vaultId).sort((a, b) => nearestDist(a.pos) - nearestDist(b.pos));
+  pick(r, nearFirst.slice(0, 5)).items.push('vault_key');
 
   const freeFloor = (minDist: number): Vec[] => {
     const out: Vec[] = [];

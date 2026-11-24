@@ -90,6 +90,8 @@ export interface RaidState {
   spawns: Vec[];
   nextZombieId: number;
   nextSpawnTurn: number;
+  /** Turnos a mais entre as levas (local calmo). */
+  calm?: number;
   /** Ruídos gerados por zumbis (portas sendo golpeadas), aplicados no turno seguinte. */
   pendingNoises: Noise[];
   /** Ruídos do último turno, só para a interface desenhar as ondas. */

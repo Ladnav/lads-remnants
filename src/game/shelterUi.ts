@@ -7,7 +7,7 @@ import type { Account, PushState } from '../net/backend';
 import type { ShelterCommand } from '../server/game';
 import { FRIEND, RIVAL, aliveSurvivors, bondOf, canAfford, dayOf, describeCost, emotionOf, friendsOf, hourOfDay, isNight, rivalsOf } from '../sim/shelter/core';
 import { pendingEmergencies } from '../sim/shelter/expeditions';
-import { SIGNAL_HOURS, evacuationNeeds, goalStage, hasUndiscovered, workEfficiency, isFinished } from '../sim/shelter/shelter';
+import { SIGNAL_HOURS, evacuationNeeds, goalStage, hasUndiscovered, workEfficiency, isFinished, isRecovering } from '../sim/shelter/shelter';
 import type { DiaryEntry, Emotion, ShelterState, ShelterSurvivor } from '../sim/shelter/types';
 
 export type View = 'shelter' | 'map';
@@ -641,7 +641,7 @@ export class ShelterUi {
     const face = this.hooks.portrait(v.id);
     return `<div class="survivor-card">
       <div class="row"><button class="who-name who-open" title="Abrir a ficha" data-cmd='${JSON.stringify({ cmd: 'profile', id: v.id })}'>${face ? `<img class="face" src="${face}" alt=""/>` : ''}${v.name}</button>
-        <span class="small ${EMOTION_CLASS[emo]}">${away ? `<span class="warn">${v.status === 'raid' ? 'em incursão' : 'em expedição'}</span>` : `${EMOTION_LABEL[emo]}${v.sick ? ' · <span class="bad">doente</span>' : ''}${booked ? ' · <span class="warn">sai à noite</span>' : ''}`}</span></div>
+        <span class="small ${EMOTION_CLASS[emo]}">${away ? `<span class="warn">${v.status === 'raid' ? 'em incursão' : 'em expedição'}</span>` : `${EMOTION_LABEL[emo]}${v.sick ? ' · <span class="bad">doente</span>' : ''}${isRecovering(s, v) ? ' · <span class="muted">dormindo</span>' : v.fatigue >= 90 ? ' · <span class="bad">exausto(a), não rende</span>' : v.fatigue > 70 ? ' · <span class="warn">cansado(a)</span>' : ''}${booked ? ' · <span class="warn">sai à noite</span>' : ''}`}</span></div>
       <div class="chips">${v.traits.map((t) => `<span class="chip ${TRAITS[t].negative ? 'neg' : ''}" title="${TRAITS[t].description}">${TRAITS[t].name}</span>`).join('')}${bonds}</div>
       <div class="stats">
         ${stat('Saúde', v.health, false)}${stat('Humor', v.mood, false)}

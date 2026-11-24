@@ -238,7 +238,8 @@ function updateNeeds(s: ShelterState, v: ShelterSurvivor, night: boolean, hasBed
   const pace = isDormant(s) ? 0.6 : 1;
   v.hunger = clamp(v.hunger + 2.4 * pace);
   v.thirst = clamp(v.thirst + 2.2 * pace);
-  const sleeping = night && v.task !== 'guard';
+  // Dorme à noite; o vigia dorme de dia, e quem voltou da expedição dorme a manhã.
+  const sleeping = night ? v.task !== 'guard' : v.task === 'guard' || isRecovering(s, v);
   if (sleeping) v.fatigue = clamp(v.fatigue - (hasBed ? 10 : 6));
   else if (!night && v.task === 'rest') v.fatigue = clamp(v.fatigue - 3);
   else v.fatigue = clamp(v.fatigue + 2.5);
@@ -275,6 +276,11 @@ function updateNeeds(s: ShelterState, v: ShelterSurvivor, night: boolean, hasBed
   v.brokenHours = emotionOf(v.mood) === 'quebrado' ? v.brokenHours + 1 : 0;
 }
 
+/** Voltou da expedição e ainda está dormindo a manhã. */
+export function isRecovering(s: ShelterState, v: ShelterSurvivor): boolean {
+  return v.restUntil !== undefined && s.hour < v.restUntil;
+}
+
 export function workEfficiency(v: ShelterSurvivor): number {
   const emo = emotionOf(v.mood);
   if (emo === 'quebrado' || v.fatigue >= 90) return 0;
@@ -291,6 +297,7 @@ function teamwork(s: ShelterState, v: ShelterSurvivor): number {
 }
 
 function work(s: ShelterState, v: ShelterSurvivor): void {
+  if (isRecovering(s, v)) return;
   const eff = workEfficiency(v) * teamwork(s, v);
   if (eff === 0) return;
   switch (v.task) {

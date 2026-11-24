@@ -87,11 +87,11 @@ export class RaidUi {
     const roof = s.exits.find((e) => e.id === 'roof');
     this.log = s.emergency
       ? [
-          { text: `${def.name} está encurralado(a) em ${s.site}. Os mortos já sabem que tem alguém aqui.`, tone: 'bad' },
+          { text: `${def.name} está encurralado(a) em ${s.site}. Os zumbis já ouviram o barulho.`, tone: 'bad' },
           { text: `Saia vivo(a). A escada do telhado abre no turno ${roof?.opensAt}.`, tone: 'warn' },
         ]
       : [
-          { text: `${def.name} entra em ${s.site}. Silêncio… por enquanto.`, tone: 'info' },
+          { text: `${def.name} entra em ${s.site}.`, tone: 'info' },
           { text: `Ache suprimentos e volte. A escada do telhado abre no turno ${roof?.opensAt}.`, tone: 'info' },
           { text: `Tem algo trancado lá no fundo: ${s.containers.find((c) => c.locked)?.name ?? 'um cofre'}. A chave deve estar em algum móvel.`, tone: 'good' },
         ];

@@ -131,6 +131,8 @@ function resolveExpedition(s: ShelterState, exp: Expedition, skipId?: string): v
     v.expeditionId = null;
     if (v.status !== 'away') continue;
     v.status = 'home';
+    // Passou a noite fora: dorme umas horas antes de voltar à tarefa.
+    v.restUntil = s.hour + 6;
     let traitMul = 1;
     if (v.traits.includes('silencioso')) traitMul *= 0.7;
     if (v.traits.includes('lutador')) traitMul *= 0.7;

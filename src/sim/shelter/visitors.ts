@@ -1,4 +1,4 @@
-import { RESOURCES, type ResourceId } from '../../data/shelter';
+import { RESOURCES, type ResourceId, type TaskId } from '../../data/shelter';
 import { RECRUITS } from '../../data/survivors';
 import { chance, nextRandom, pick, randInt } from '../rng';
 import { addResources, aliveSurvivors, changeMood, log } from './core';
@@ -131,7 +131,7 @@ export function resolveDilemma(s: ShelterState, dilemmaId: number, optionId: str
           fatigue: 50,
           mood: 45,
           sick: false,
-          task: 'rest',
+          task: firstUsefulTask(s),
           status: 'home',
           expeditionId: null,
           talkedDay: 0,
@@ -139,7 +139,7 @@ export function resolveDilemma(s: ShelterState, dilemmaId: number, optionId: str
           raidDay: 0,
         });
         changeMood(s, 3);
-        log(s, `${r.name} agora faz parte do grupo.`, 'good');
+        log(s, `${r.name} agora faz parte do grupo. ${JOINS[s.survivors[s.survivors.length - 1].task] ?? ''}`.trim(), 'good');
       } else {
         changeMood(s, -6);
         log(s, `Vocês fecharam a porta para ${r?.name ?? 'o refugiado'}. Ninguém comentou.`, 'warn');
@@ -188,4 +188,15 @@ export function expireDilemmas(s: ShelterState): void {
       resolveDilemma(s, d.id, fallback);
     }
   }
+}
+
+const JOINS: Partial<Record<TaskId, string>> = { craft: 'Já foi ajudar na obra.', garden: 'Já foi para a horta.', clean: 'Já pegou a vassoura.' };
+
+/** Quem chega vai para onde falta gente: a obra, depois a horta, depois a limpeza. */
+function firstUsefulTask(s: ShelterState): TaskId {
+  const home = s.survivors.filter((v) => v.status === 'home');
+  if (!home.some((v) => v.task === 'craft')) return 'craft';
+  if (s.buildings.garden && !home.some((v) => v.task === 'garden')) return 'garden';
+  if (!home.some((v) => v.task === 'clean')) return 'clean';
+  return 'craft';
 }

@@ -50,11 +50,14 @@ const casual: Policy = (s) => {
     if (v.task === 'garden' && !s.buildings.garden) setTask(s, v.id, 'craft');
   }
   if (s.buildings.garden && !home.some((v) => v.task === 'garden') && home.length > 2) {
-    const helper = home.find((v) => v.task === 'rest' || v.task === 'craft');
+    // Nunca tira da obra quem é o único construindo.
+    const crafters = home.filter((v) => v.task === 'craft').length;
+    const helper = home.find((v) => v.task === 'rest' || (v.task === 'craft' && crafters > 1));
     if (helper) setTask(s, helper.id, 'garden');
   }
   if (s.resources.waste > 6 && !home.some((v) => v.task === 'clean')) {
-    const helper = home.find((v) => v.task !== 'guard' && v.task !== 'garden') ?? home[0];
+    const crafters = home.filter((v) => v.task === 'craft').length;
+    const helper = home.find((v) => v.task === 'rest') ?? home.find((v) => v.task === 'craft' && crafters > 1);
     if (helper) setTask(s, helper.id, 'clean');
   }
   if (h === 20 && !s.expeditions.length) {

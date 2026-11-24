@@ -29,6 +29,8 @@ export interface ShelterSurvivor {
   brokenHours: number;
   /** Dia da última incursão ativa: só uma por dia por pessoa. */
   raidDay: number;
+  /** Voltou de uma expedição noturna: dorme até esta hora antes de voltar à tarefa. */
+  restUntil?: number;
 }
 
 /** Ordem permanente: repetir esta expedição toda noite, enquanto houver gente em condições. */
