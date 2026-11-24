@@ -608,6 +608,96 @@
       "textTokens": 964,
       "imageTokens": 1120,
       "usd": 0.1468
+    },
+    {
+      "at": "2026-11-24T02:45:37.188Z",
+      "job": "pixel-body-iuri",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 634,
+      "textTokens": 556,
+      "imageTokens": 1120,
+      "usd": 0.1423
+    },
+    {
+      "at": "2026-11-24T02:45:53.159Z",
+      "job": "pixel-body-lena",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 629,
+      "textTokens": 512,
+      "imageTokens": 1120,
+      "usd": 0.1418
+    },
+    {
+      "at": "2026-11-24T02:46:09.192Z",
+      "job": "pixel-body-bruno",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 626,
+      "textTokens": 464,
+      "imageTokens": 1120,
+      "usd": 0.1412
+    },
+    {
+      "at": "2026-11-24T02:46:25.583Z",
+      "job": "pixel-body-ana",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 630,
+      "textTokens": 499,
+      "imageTokens": 1120,
+      "usd": 0.1416
+    },
+    {
+      "at": "2026-11-24T02:46:41.784Z",
+      "job": "pixel-body-caio",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 623,
+      "textTokens": 486,
+      "imageTokens": 1120,
+      "usd": 0.1415
+    },
+    {
+      "at": "2026-11-24T02:46:56.459Z",
+      "job": "pixel-body-dona_rita",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 629,
+      "textTokens": 485,
+      "imageTokens": 1120,
+      "usd": 0.1415
+    },
+    {
+      "at": "2026-11-24T02:47:13.059Z",
+      "job": "pixel-body-teo",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 628,
+      "textTokens": 575,
+      "imageTokens": 1120,
+      "usd": 0.1426
+    },
+    {
+      "at": "2026-11-24T02:47:27.544Z",
+      "job": "pixel-body-zombie-walker",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 344,
+      "textTokens": 486,
+      "imageTokens": 1120,
+      "usd": 0.1409
+    },
+    {
+      "at": "2026-11-24T02:47:41.548Z",
+      "job": "pixel-body-zombie-runner",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 343,
+      "textTokens": 474,
+      "imageTokens": 1120,
+      "usd": 0.1408
+    },
+    {
+      "at": "2026-11-24T02:47:55.263Z",
+      "job": "pixel-body-zombie-brute",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 337,
+      "textTokens": 494,
+      "imageTokens": 1120,
+      "usd": 0.141
     }
   ]
 }

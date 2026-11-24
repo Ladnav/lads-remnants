@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import type { ZombieKind } from '../data/zombies';
-import { artUrl } from './art';
 import { softShadow } from './night';
 import { shade } from './oblique';
 
@@ -88,12 +87,35 @@ const PAINTED_ALL = [...PAINTED, 'zombie-walker', 'zombie-runner', 'zombie-brute
 
 /** Carrega os personagens pintados. Chame no preload() de cada cena que tem gente. */
 export function preloadBodies(scene: Phaser.Scene): void {
+  // Pixel art: folha de passo 4×4 (baixo, esquerda, direita, cima) de quadros de 64 px.
   for (const id of PAINTED_ALL) {
-    for (const v of ['front', 'back']) {
-      const key = `body-${id}-${v}`;
-      if (!scene.textures.exists(key)) scene.load.image(key, artUrl(key));
+    const key = `pxbody-${id}`;
+    if (!scene.textures.exists(key)) scene.load.spritesheet(key, `pixel/body-${id}.png`, { frameWidth: PX_FRAME, frameHeight: PX_FRAME });
+  }
+}
+
+/** Quadro da folha de passo em pixel art. */
+const PX_FRAME = 64;
+const PX_ROW: Record<Facing, number> = { down: 0, left: 1, right: 2, up: 3 };
+
+/** Sombra de pixel art: elipse em três tons, sem borda borrada. */
+function pixelFoot(scene: Phaser.Scene): string {
+  const key = 'px-foot';
+  if (scene.textures.exists(key)) return key;
+  const W = 26;
+  const H = 8;
+  const tex = scene.textures.createCanvas(key, W, H)!;
+  const ctx = tex.getContext();
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const k = Math.hypot((x + 0.5 - W / 2) / (W / 2), (y + 0.5 - H / 2) / (H / 2));
+      if (k > 1) continue;
+      ctx.fillStyle = `rgba(10,9,8,${k < 0.55 ? 0.5 : k < 0.8 ? 0.34 : 0.18})`;
+      ctx.fillRect(x, y, 1, 1);
     }
   }
+  tex.refresh();
+  return key;
 }
 
 /** Altura do personagem pintado na tela, em pixels lógicos. */
@@ -342,10 +364,27 @@ export class Actor {
   private painted: { front: string; back: string; scale: number } | null = null;
   private bob: Phaser.Tweens.Tween | null = null;
   private scene: Phaser.Scene;
+  /** Personagem em pixel art: folha de passo com 4 direções. */
+  private px: string | null = null;
+  private dir: Facing = 'down';
 
   constructor(scene: Phaser.Scene, look: Look) {
     this.scene = scene;
     this.key = ensureLook(scene, look);
+    const pxKey = `pxbody-${look.paint}`;
+    if (look.paint && scene.textures.exists(pxKey) && scene.textures.get(pxKey).frameTotal > 16) {
+      this.px = pxKey;
+      for (const d of Object.keys(PX_ROW) as Facing[]) {
+        const anim = `${pxKey}-${d}`;
+        if (!scene.anims.exists(anim)) {
+          scene.anims.create({ key: anim, frames: scene.anims.generateFrameNumbers(pxKey, { start: PX_ROW[d] * 4, end: PX_ROW[d] * 4 + 3 }), frameRate: 8, repeat: -1 });
+        }
+      }
+      this.shadow = scene.add.image(0, -1, pixelFoot(scene)).setDisplaySize(look.build === 'big' ? 30 : 24, 8);
+      this.sprite = scene.add.sprite(0, 2, pxKey, 0).setOrigin(0.5, 1);
+      this.container = scene.add.container(0, 0, [this.shadow, this.sprite]);
+      return;
+    }
     this.shadow = scene.add.image(0, -1, softShadow(scene)).setDisplaySize(look.build === 'big' ? 26 : 21, 8).setAlpha(0.55);
     const front = `body-${look.paint}-front`;
     const back = `body-${look.paint}-back`;
@@ -362,6 +401,12 @@ export class Actor {
   }
 
   face(dir: Facing): void {
+    if (this.px) {
+      if (dir === this.dir) return;
+      this.dir = dir;
+      this.refresh();
+      return;
+    }
     const view: View = dir === 'left' || dir === 'right' ? 'side' : dir;
     this.sprite.setFlipX(dir === 'left');
     if (view === this.view) return;
@@ -386,9 +431,15 @@ export class Actor {
     if (pose === this.pose) return;
     this.pose = pose;
     this.stopBob();
-    this.sprite.setCrop().setAngle(0).setPosition(0, this.painted ? 1 : PX);
+    this.sprite.setCrop().setAngle(0).setPosition(0, this.px ? 2 : this.painted ? 1 : PX);
     this.shadow.setVisible(pose === 'stand');
-    if (this.painted) {
+    if (this.px) {
+      this.sprite.anims.stop();
+      this.sprite.setFrame(0);
+      // Na cama só a cabeça e os ombros; no chão, deitado de lado.
+      if (pose === 'bed') this.sprite.setCrop(0, 0, PX_FRAME, 26);
+      if (pose === 'floor') this.sprite.setAngle(-90).setPosition(PX_FRAME / 2 - 6, 4);
+    } else if (this.painted) {
       const src = this.scene.textures.get(this.painted.front).getSourceImage();
       // Na cama só a cabeça e os ombros ficam fora do cobertor.
       if (pose === 'bed') this.sprite.setTexture(this.painted.front).setCrop(0, 0, src.width, src.height * 0.3);
@@ -406,6 +457,15 @@ export class Actor {
   }
 
   private refresh(): void {
+    if (this.px) {
+      if (this.pose !== 'stand') return;
+      if (this.walking) this.sprite.anims.play(`${this.px}-${this.dir}`, true);
+      else {
+        this.sprite.anims.stop();
+        this.sprite.setFrame(PX_ROW[this.dir] * 4);
+      }
+      return;
+    }
     if (this.painted) {
       if (this.pose !== 'stand') {
         this.sprite.setFlipX(false);
