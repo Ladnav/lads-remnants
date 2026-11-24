@@ -1,5 +1,6 @@
+import { GEAR, fresh, type Worn } from '../../data/gear';
 import { ITEMS, type ItemId } from '../../data/items';
-import { ITEM_TO_RESOURCES, LOCATIONS, RECIPES, RESOURCES, RISK_RULES, locationById, type RecipeId, type ResourceId, type TaskId } from '../../data/shelter';
+import { LOCATIONS, RECIPES, RESOURCES, RISK_RULES, locationById, type RecipeId, type ResourceId, type TaskId } from '../../data/shelter';
 import { SURVIVORS } from '../../data/survivors';
 import { chance, pick, randInt } from '../rng';
 import {
@@ -21,6 +22,8 @@ import {
   isNight,
   log,
   rivalsOf,
+  stashItem,
+  syncWeapons,
 } from './core';
 import { tickBonds } from './bonds';
 import { processExpeditions, sendExpedition, summarize } from './expeditions';
@@ -43,6 +46,7 @@ const STARTING_TASKS: Record<string, TaskId> = { marta: 'craft', iuri: 'guard', 
 export function createShelter(seed: number, nowMs: number): ShelterState {
   const s: ShelterState = {
     version: 1,
+    arsenal: [fresh('knife')],
     seed,
     rng: seed | 0 || 1,
     hour: START_HOUR,
@@ -104,6 +108,11 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
 /** Saves antigos não têm os campos da Fase 3. */
 export function migrate(s: ShelterState): ShelterState {
   s.discovered ??= LOCATIONS.filter((l) => l.known).map((l) => l.id);
+  // Antes do arsenal, "armas" eram só um número: viram facas improvisadas.
+  if (!s.arsenal) {
+    s.arsenal = Array.from({ length: Math.floor(s.resources.weapons) }, () => fresh('knife'));
+    syncWeapons(s);
+  }
   s.seenResources ??= null;
   s.seenAlive ??= [];
   s.activeRaid ??= null;
@@ -308,7 +317,7 @@ function work(s: ShelterState, v: ShelterSurvivor): void {
       if (def.needsWorkbench && !s.buildings.workbench) return;
       p.progress += eff * (v.traits.includes('mecanico') ? 1.5 : 1);
       if (p.progress >= def.hours) {
-        if (p.recipe === 'weapon') s.resources.weapons += 1;
+        if (p.recipe === 'weapon') stashItem(s, 'knife');
         else s.buildings[p.recipe]++;
         s.project = null;
         log(s, `${def.icon} ${def.name} pronto(a). Obra de ${v.name}.`, 'good');
@@ -551,6 +560,10 @@ export interface RaidOutcome {
   items: ItemId[];
   hpLost: number;
   kills: number;
+  /** Equipamento que voltou inteiro (só em extração). */
+  gear?: Worn[];
+  /** Balas que sobraram (só em extração). */
+  rounds?: number;
 }
 
 /**
@@ -566,7 +579,13 @@ export function applyRaidResult(s: ShelterState, id: string, r: RaidOutcome, loc
     return;
   }
   const loot = r.items.filter((it) => it !== 'map_note' && it !== 'vault_key');
-  for (const it of loot) addResources(s, ITEM_TO_RESOURCES[it]);
+  for (const it of loot) stashItem(s, it);
+  // O equipamento levado volta para o arsenal, com o desgaste que sobrou (arma quebrada não volta).
+  for (const w of r.gear ?? []) {
+    s.arsenal.push({ ...w });
+    syncWeapons(s);
+  }
+  if (r.rounds) s.resources.ammo += r.rounds;
   const found: ItemId[] = [...loot];
   for (const it of carried) {
     const k = found.indexOf(it);
@@ -588,6 +607,22 @@ export function applyRaidResult(s: ShelterState, id: string, r: RaidOutcome, loc
     s.mapsFound.push(loc.id);
     revealLocation(s);
   }
+}
+
+// ---------- Arsenal ----------
+
+/** Conserta uma arma do arsenal na bancada: 1 peça devolve o desgaste inteiro. */
+export function repairGear(s: ShelterState, index: number): string | null {
+  const w = s.arsenal[index];
+  const full = w ? GEAR[w.id]?.durability : undefined;
+  if (!w || !full) return 'Isso não precisa de conserto.';
+  if (!s.buildings.workbench) return 'Precisa de uma bancada.';
+  if (w.wear >= full) return 'Já está inteira.';
+  if (s.resources.parts < 1) return 'Falta 1 peça.';
+  s.resources.parts -= 1;
+  w.wear = full;
+  log(s, `${ITEMS[w.id].name} consertado(a) na bancada.`);
+  return null;
 }
 
 // ---------- Ordens permanentes ----------

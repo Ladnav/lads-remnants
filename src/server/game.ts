@@ -1,11 +1,12 @@
 // Regras de "servidor": tudo o que muda o abrigo passa por aqui. O mesmo código roda
 // no navegador (modo offline) e na Edge Function do Supabase (modo online), então o
 // cliente nunca escreve o estado direto: só pede comandos.
+import { GEAR, type Loadout, type Slot, type Worn } from '../data/gear';
 import type { ItemId } from '../data/items';
 import { locationById, type RecipeId, type RiskRule, type TaskId } from '../data/shelter';
 import { replay } from '../sim/raid/raid';
 import type { Action } from '../sim/raid/types';
-import { aliveSurvivors, clamp, dayOf, hourOfDay, log } from '../sim/shelter/core';
+import { aliveSurvivors, clamp, dayOf, hourOfDay, log, syncWeapons } from '../sim/shelter/core';
 import { cancelExpedition, delegateEmergency, pendingEmergencies, sendExpedition, takeOverEmergency } from '../sim/shelter/expeditions';
 import {
   advanceTo,
@@ -20,6 +21,7 @@ import {
   migrate,
   queueProject,
   raidHp,
+  repairGear,
   setStanding,
   unqueueProject,
   setRationing,
@@ -46,6 +48,7 @@ export type ShelterCommand =
   | { type: 'queue'; recipe: RecipeId }
   | { type: 'unqueue'; index: number }
   | { type: 'evacuate' }
+  | { type: 'repair'; index: number }
   | { type: 'seen' };
 
 export interface RaidRequest {
@@ -53,8 +56,11 @@ export interface RaidRequest {
   locationId: string;
   /** Assumir o controle de uma emergência desta expedição. */
   emergencyExpId?: number;
-  /** Equipamento tirado do estoque do abrigo. Perdido se o sobrevivente morrer ou fugir. */
-  loadout?: { weapon?: boolean; bandages?: number };
+  /**
+   * Equipamento tirado do arsenal (índices em `arsenal`) e do estoque. Perdido se o sobrevivente morrer
+   * ou fugir. `weapon: true` (versão antiga) leva a primeira arma do arsenal.
+   */
+  loadout?: { weapon?: boolean | number; pack?: number; armor?: number; util?: number; rounds?: number; bandages?: number };
 }
 
 /** Cansaço a partir do qual ninguém aceita sair para uma incursão. */
@@ -163,6 +169,7 @@ export function applyCommand(s: ShelterState, cmd: ShelterCommand, nowMs: number
     case 'unqueue': unqueueProject(s, cmd.index); break;
     case 'evacuate': error = evacuate(s); break;
     case 'seen': markSeen(s); break;
+    case 'repair': error = repairGear(s, cmd.index); break;
     default: error = 'Comando desconhecido.';
   }
   return error ? fail(error) : ok(null);
@@ -177,6 +184,8 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
 
   let emergency = false;
   const startItems: ItemId[] = [];
+  let gear: Loadout = {};
+  let rounds = 0;
   if (req.emergencyExpId !== undefined) {
     const taken = takeOverEmergency(s, req.emergencyExpId);
     if (!taken || taken.survivor.id !== req.survivorId || taken.locationId !== req.locationId) return fail('Essa emergência já passou.');
@@ -187,12 +196,11 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
     if (v.raidDay === dayOf(s.hour)) return fail(`${v.name} já saiu hoje. Só amanhã.`);
     if (v.fatigue >= RAID_MAX_FATIGUE) return fail(`${v.name} está exausto(a) demais para sair.`);
     const bandages = Math.max(0, Math.min(2, Math.floor(req.loadout?.bandages ?? 0)));
-    if (req.loadout?.weapon && s.resources.weapons < 1) return fail('Não há arma sobrando no abrigo.');
     if (s.resources.bandages < bandages) return fail('Não há bandagens suficientes.');
-    if (req.loadout?.weapon) {
-      s.resources.weapons -= 1;
-      startItems.push('crowbar');
-    }
+    const picked = pickLoadout(s, req.loadout);
+    if (typeof picked === 'string') return fail(picked);
+    gear = picked.gear;
+    rounds = picked.rounds;
     s.resources.bandages -= bandages;
     for (let i = 0; i < bandages; i++) startItems.push('bandage');
     v.raidDay = dayOf(s.hour);
@@ -213,6 +221,8 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
       startHp: raidHp(v),
       emergency,
       startItems,
+      gear,
+      rounds,
       // O que sobrou no local: saquear demais deixa o prédio vazio.
       lootScale: ((s.locationStock[loc.id] ?? 100) / 100) * (emergency ? 0.5 : 1),
       specials: SPECIALS_BY_DANGER[loc.danger],
@@ -224,6 +234,31 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
   };
   s.activeRaid = ticket;
   return ok(ticket);
+}
+
+/**
+ * Tira do arsenal o que foi escolhido para os quatro espaços (cada índice, um item do espaço certo) e
+ * as balas do estoque, só se houver arma de fogo. Devolve o motivo quando não dá.
+ */
+function pickLoadout(s: ShelterState, l: RaidRequest['loadout']): { gear: Loadout; rounds: number } | string {
+  const gear: Loadout = {};
+  const used: number[] = [];
+  const slots: [Slot, unknown][] = [['weapon', l?.weapon === true ? s.arsenal.findIndex((w) => GEAR[w.id]?.slot === 'weapon') : l?.weapon], ['pack', l?.pack], ['armor', l?.armor], ['util', l?.util]];
+  for (const [slot, raw] of slots) {
+    if (raw === undefined || raw === false || raw === null) continue;
+    const i = Number(raw);
+    const item = s.arsenal[i];
+    if (!Number.isInteger(i) || !item || used.includes(i)) return 'Esse equipamento não está no arsenal.';
+    if (GEAR[item.id]?.slot !== slot) return 'Esse equipamento não vai nesse espaço.';
+    used.push(i);
+    gear[slot] = { ...item };
+  }
+  const gun = gear.weapon && GEAR[gear.weapon.id]?.weapon?.range;
+  const rounds = gun ? Math.max(0, Math.min(12, Math.floor(l?.rounds ?? 0), Math.floor(s.resources.ammo))) : 0;
+  s.arsenal = s.arsenal.filter((_, i) => !used.includes(i));
+  syncWeapons(s);
+  s.resources.ammo -= rounds;
+  return { gear, rounds };
 }
 
 /** Reproduz a incursão a partir do log de ações e aplica o resultado no abrigo. */
@@ -250,6 +285,9 @@ export function finishRaid(s: ShelterState, raidId: number, actions: Action[], n
     items: [...end.backpack],
     hpLost: end.survivor.maxHp - end.survivor.hp,
     kills: end.kills,
+    // Só volta o que estava no corpo de quem saiu vivo (arma quebrada já saiu do equipamento).
+    gear: end.status === 'extracted' ? (Object.values(end.gear).filter(Boolean) as Worn[]) : [],
+    rounds: end.status === 'extracted' ? end.rounds : 0,
   };
   s.activeRaid = null;
   const v = s.survivors.find((x) => x.id === t.survivorId);

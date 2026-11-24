@@ -85,7 +85,19 @@ const shelterUi = new ShelterUi({ hud, top: topbar, ticker }, {
     }
   },
   setView: (v) => switchTo(v),
-  startRaid: (survivorId, locationId, loadout) => void playRaid({ survivorId, locationId, loadout }),
+  startRaid: (survivorId, locationId, l) =>
+    void playRaid({
+      survivorId,
+      locationId,
+      loadout: {
+        weapon: l.weapon >= 0 ? l.weapon : undefined,
+        pack: l.pack >= 0 ? l.pack : undefined,
+        armor: l.armor >= 0 ? l.armor : undefined,
+        util: l.util >= 0 ? l.util : undefined,
+        rounds: l.rounds,
+        bandages: l.bandages,
+      },
+    }),
   takeOver: (expId) => {
     const e = shelter.expeditions.find((x) => x.id === expId);
     if (e?.emergency) void playRaid({ survivorId: e.emergency.survivorId, locationId: e.locationId, emergencyExpId: expId });
@@ -195,6 +207,9 @@ async function boot(): Promise<void> {
     Object.assign(shelter.resources, { food: 14, water: 15, wood: 10 });
     shelter.gardenWatered = true;
     if (qs.has('tudo')) shelter.discovered = LOCATIONS.map((l) => l.id);
+    shelter.arsenal.push({ id: 'revolver', wear: 22 }, { id: 'bat', wear: 4 }, { id: 'pack_hiking', wear: 0 }, { id: 'vest', wear: 0 }, { id: 'flashlight', wear: 0 });
+    shelter.resources.ammo = 8;
+    shelter.resources.weapons = shelter.arsenal.filter((w) => w.id !== 'pack_hiking' && w.id !== 'vest' && w.id !== 'flashlight').length;
     if (qs.has('noite')) shelter.hour = Math.floor(shelter.hour / 24) * 24 + 22;
     shelter.lastSeenHour = shelter.hour;
   }
@@ -212,7 +227,9 @@ async function boot(): Promise<void> {
   const raidAt = new URLSearchParams(location.search).get('incursao');
   if (import.meta.env.DEV && !backend.online && raidAt) {
     shelter.discovered = LOCATIONS.map((l) => l.id);
-    void playRaid({ survivorId: 'marta', locationId: raidAt } as RaidRequest);
+    // `&armado` entra com revólver, colete e lanterna (do arsenal de demonstração).
+    const armed = qs.has('armado') ? { weapon: shelter.arsenal.findIndex((w) => w.id === 'revolver'), armor: shelter.arsenal.findIndex((w) => w.id === 'vest'), util: shelter.arsenal.findIndex((w) => w.id === 'flashlight'), rounds: 6 } : undefined;
+    void playRaid({ survivorId: 'marta', locationId: raidAt, loadout: armed } as RaidRequest);
     return;
   }
   if (shelter.hour > seenBefore) showReport(seenBefore, resBefore, aliveBefore);

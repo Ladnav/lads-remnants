@@ -1,3 +1,4 @@
+import type { Loadout } from '../../data/gear';
 import type { ItemId } from '../../data/items';
 import type { TraitId } from '../../data/survivors';
 import type { ZombieKind } from '../../data/zombies';
@@ -90,6 +91,10 @@ export interface RaidState {
   spawns: Vec[];
   nextZombieId: number;
   nextSpawnTurn: number;
+  /** Equipamento no corpo (arma com desgaste, mochila, proteção, utilitário). */
+  gear: Loadout;
+  /** Balas soltas para a arma de fogo. */
+  rounds: number;
   /** Turnos a mais entre as levas (local calmo). */
   calm?: number;
   /** Ruídos gerados por zumbis (portas sendo golpeadas), aplicados no turno seguinte. */
@@ -112,6 +117,7 @@ export type Action =
   | { type: 'force'; x: number; y: number }
   | { type: 'throw'; x: number; y: number }
   | { type: 'crack'; containerId: number }
+  | { type: 'shoot'; x: number; y: number }
   | { type: 'extract' };
 
 export type EventTone = 'info' | 'good' | 'warn' | 'bad';

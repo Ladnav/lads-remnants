@@ -1,4 +1,6 @@
-import { RESOURCES, type Cost, type ResourceId } from '../../data/shelter';
+import { GEAR, fresh, isGear } from '../../data/gear';
+import type { ItemId } from '../../data/items';
+import { ITEM_TO_RESOURCES, RESOURCES, type Cost, type ResourceId } from '../../data/shelter';
 import type { EventTone } from '../raid/types';
 import type { Emotion, ShelterState, ShelterSurvivor } from './types';
 
@@ -41,6 +43,19 @@ export function addResources(s: ShelterState, cost: Cost, sign = 1): void {
   for (const r of Object.keys(cost) as ResourceId[]) {
     s.resources[r] = Math.max(0, s.resources[r] + sign * (cost[r] ?? 0));
   }
+}
+
+/** O contador de armas (defesa noturna, barra de cima) acompanha as armas do arsenal. */
+export function syncWeapons(s: ShelterState): void {
+  s.resources.weapons = s.arsenal.filter((w) => GEAR[w.id]?.slot === 'weapon').length;
+}
+
+/** Guarda um item trazido de fora: equipamento vai para o arsenal, o resto vira estoque. */
+export function stashItem(s: ShelterState, it: ItemId, wear?: number): void {
+  if (isGear(it)) {
+    s.arsenal.push(wear === undefined ? fresh(it) : { id: it, wear });
+    syncWeapons(s);
+  } else addResources(s, ITEM_TO_RESOURCES[it]);
 }
 
 export function describeCost(cost: Cost): string {

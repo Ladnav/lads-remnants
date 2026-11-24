@@ -1,3 +1,4 @@
+import type { Worn } from '../../data/gear';
 import type { BuildingId, RecipeId, ResourceId, RiskRule, TaskId } from '../../data/shelter';
 import type { SurvivorDef, TraitId } from '../../data/survivors';
 import type { RaidOptions } from '../raid/raid';
@@ -90,6 +91,8 @@ export interface DiaryEntry {
 
 export interface ShelterState {
   version: 1;
+  /** Equipamento guardado (armas lembram o desgaste). */
+  arsenal: Worn[];
   seed: number;
   rng: number;
   /** Horas de jogo desde o início. 1 dia de jogo = 24h de jogo = 12h reais. */

@@ -6,7 +6,13 @@
 import { LOCATIONS } from '../src/data/shelter';
 import { SURVIVORS } from '../src/data/survivors';
 import { ITEMS } from '../src/data/items';
-import { applyAction, capacity, carriedWeight, createRaid, exitBlocked, exitStatus, lootValue } from '../src/sim/raid/raid';
+import { applyAction, canShootAt, capacity, carriedWeight, createRaid, exitBlocked, exitStatus, lootValue } from '../src/sim/raid/raid';
+import { fresh } from '../src/data/gear';
+import type { ItemId } from '../src/data/items';
+
+/** EQUIP=revolver|knife|machete|nada (padrão: nada) e ROUNDS=n. */
+const EQUIP = (process.env.EQUIP ?? 'nada') as ItemId | 'nada';
+const ROUNDS = Number(process.env.ROUNDS ?? 6);
 import type { RaidState, Vec } from '../src/sim/raid/types';
 
 const DIRS: Vec[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
@@ -59,9 +65,15 @@ function walk(s: RaidState, st: Vec): void {
 function play(seed: number, locIdx: number, survivorIdx: number) {
   const loc = LOCATIONS[locIdx];
   const def = SURVIVORS[survivorIdx];
-  const s = createRaid(seed, def, { site: loc.name, loot: loc.loot, zombies: loc.zombies, prize: loc.prize, specials: { 1: 0.1, 2: 0.25, 3: 0.4 }[loc.danger], calm: { 1: 4, 2: 1, 3: 0 }[loc.danger], danger: loc.danger });
+  const s = createRaid(seed, def, { site: loc.name, loot: loc.loot, zombies: loc.zombies, prize: loc.prize, specials: { 1: 0.1, 2: 0.25, 3: 0.4 }[loc.danger], calm: { 1: 4, 2: 1, 3: 0 }[loc.danger], danger: loc.danger, gear: EQUIP === 'nada' ? {} : { weapon: fresh(EQUIP) }, rounds: EQUIP === 'revolver' || EQUIP === 'shotgun' ? ROUNDS : 0 });
   let vault = false;
   for (let guard = 0; guard < 400 && s.status === 'active'; guard++) {
+    // Arma de fogo: atira no zumbi que vem chegando antes de ele encostar.
+    const target = s.zombies.find((z) => z.state === 'chasing' && canShootAt(s, z.pos) && Math.abs(z.pos.x - s.player.x) + Math.abs(z.pos.y - s.player.y) > 1);
+    if (target) {
+      applyAction(s, { type: 'shoot', x: target.pos.x, y: target.pos.y });
+      continue;
+    }
     // Zumbi encostado: bate.
     const z = s.zombies.find((z) => Math.abs(z.pos.x - s.player.x) + Math.abs(z.pos.y - s.player.y) === 1);
     if (z) {

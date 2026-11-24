@@ -1,3 +1,4 @@
+import { BASE_CAPACITY, BUTT, GEAR, HANDS, type Loadout, type WeaponStats } from '../../data/gear';
 import { ITEMS, type ItemId } from '../../data/items';
 import type { SurvivorDef, TraitId } from '../../data/survivors';
 import { ZOMBIES } from '../../data/zombies';
@@ -18,8 +19,8 @@ import type { Action, Container, EventTone, Noise, RaidEvent, RaidState, Vec, Zo
 
 export const VIEW_RADIUS = 7;
 export const ZOMBIE_SIGHT = 6;
-const BASE_CAPACITY = 10;
-const STRONG_CAPACITY = 14;
+/** Traço Forte: kg a mais em qualquer mochila. */
+const STRONG_BONUS = 4;
 
 const NOISE = {
   step: 2,
@@ -46,6 +47,10 @@ export interface RaidOptions extends SiteOptions {
   emergency?: boolean;
   /** Equipamento trazido do abrigo: já começa na mochila. */
   startItems?: ItemId[];
+  /** Os quatro espaços de equipamento. */
+  gear?: Loadout;
+  /** Balas levadas do abrigo. */
+  rounds?: number;
 }
 
 export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {}): RaidState {
@@ -74,6 +79,9 @@ export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {
     nextZombieId: map.zombies.length,
     nextSpawnTurn: 8 + (opts.calm ?? 0),
     calm: opts.calm ?? 0,
+    // Cópia: o desgaste muda durante a incursão, e o replay precisa do equipamento como saiu.
+    gear: JSON.parse(JSON.stringify(opts.gear ?? {})) as Loadout,
+    rounds: opts.rounds ?? 0,
     pendingNoises: [],
     lastNoises: [],
     kills: 0,
@@ -108,7 +116,42 @@ export function hasTrait(state: RaidState, t: TraitId): boolean {
 }
 
 export function capacity(state: RaidState): number {
-  return hasTrait(state, 'forte') ? STRONG_CAPACITY : BASE_CAPACITY;
+  const pack = state.gear.pack ? (GEAR[state.gear.pack.id]?.capacity ?? BASE_CAPACITY) : BASE_CAPACITY;
+  const burden = state.gear.armor ? (GEAR[state.gear.armor.id]?.burden ?? 0) : 0;
+  return pack + (hasTrait(state, 'forte') ? STRONG_BONUS : 0) - burden;
+}
+
+/** A arma na mão: a de corpo a corpo, ou a coronhada se for de fogo, ou as mãos. */
+export function meleeStats(state: RaidState): WeaponStats {
+  const w = state.gear.weapon ? GEAR[state.gear.weapon.id]?.weapon : undefined;
+  if (!w) return HANDS;
+  return w.range ? BUTT : w;
+}
+
+/** Arma de fogo equipada, se houver. */
+export function firearm(state: RaidState): WeaponStats | null {
+  const w = state.gear.weapon ? GEAR[state.gear.weapon.id]?.weapon : undefined;
+  return w?.range ? w : null;
+}
+
+/** Balas disponíveis, contando as caixas e pentes ainda fechados na mochila. */
+export function roundsLeft(state: RaidState): number {
+  return state.rounds + state.backpack.reduce((n, it) => n + (it === 'ammo' ? 2 : it === 'ammo_box' ? 8 : 0), 0);
+}
+
+/** Desgasta a arma; com o desgaste no zero ela quebra e a luta volta para as mãos. */
+function wearWeapon(state: RaidState, say: (t: string, tone?: EventTone) => void): void {
+  const w = state.gear.weapon;
+  if (!w) return;
+  w.wear--;
+  if (w.wear <= 0) {
+    say(`${ITEMS[w.id].name} quebrou. Agora é na mão.`, 'bad');
+    state.gear.weapon = undefined;
+  }
+}
+
+function utilHas(state: RaidState, flag: 'picks' | 'quiet'): boolean {
+  return !!(state.gear.util && GEAR[state.gear.util.id]?.[flag]);
 }
 
 export function carriedWeight(state: RaidState): number {
@@ -120,7 +163,7 @@ export function lootValue(items: readonly ItemId[]): number {
 }
 
 export function hasCrowbar(state: RaidState): boolean {
-  return state.backpack.includes('crowbar');
+  return state.backpack.includes('crowbar') || state.gear.weapon?.id === 'crowbar';
 }
 
 export function hasKey(state: RaidState): boolean {
@@ -130,6 +173,7 @@ export function hasKey(state: RaidState): boolean {
 /** Como abrir o prêmio sem a chave: pé de cabra (rápido, barulhento) ou mãos de mecânico (lento, quieto). */
 export function crackPlan(state: RaidState): { turns: number; noise: number } | null {
   if (hasCrowbar(state)) return { turns: 2, noise: NOISE.crack };
+  if (utilHas(state, 'picks')) return { turns: 3, noise: NOISE.crackQuiet };
   if (hasTrait(state, 'mecanico')) return { turns: 4, noise: NOISE.crackQuiet };
   return null;
 }
@@ -180,12 +224,13 @@ export function adjacentLockedDoors(state: RaidState): Vec[] {
 export function computeVisible(state: RaidState): boolean[] {
   const vis = new Array<boolean>(state.width * state.height).fill(false);
   const p = state.player;
-  for (let y = p.y - VIEW_RADIUS; y <= p.y + VIEW_RADIUS; y++) {
-    for (let x = p.x - VIEW_RADIUS; x <= p.x + VIEW_RADIUS; x++) {
+  const R = VIEW_RADIUS + (state.gear.util ? (GEAR[state.gear.util.id]?.sight ?? 0) : 0);
+  for (let y = p.y - R; y <= p.y + R; y++) {
+    for (let x = p.x - R; x <= p.x + R; x++) {
       if (!inBounds(state, x, y)) continue;
       const dx = x - p.x;
       const dy = y - p.y;
-      if (dx * dx + dy * dy > VIEW_RADIUS * VIEW_RADIUS + 1) continue;
+      if (dx * dx + dy * dy > R * R + 1) continue;
       if (lineOfSight(state, p, { x, y })) vis[idx(state, x, y)] = true;
     }
   }
@@ -275,7 +320,7 @@ export function applyAction(state: RaidState, action: Action): RaidEvent[] {
     case 'pick': {
       const t = tileAt(state, action.x, action.y);
       if (t?.kind !== 'door' || t.door !== 'locked' || manhattan(state.player, action) !== 1) break;
-      const turns = hasTrait(state, 'mecanico') ? 1 : 3;
+      const turns = hasTrait(state, 'mecanico') || utilHas(state, 'picks') ? 1 : 3;
       say(turns === 1 ? 'Você abre a fechadura num instante.' : 'Você trabalha na fechadura com cuidado…');
       for (let i = 0; i < turns && state.status === 'active'; i++) {
         endTurn(state, ev, [{ pos: { ...state.player }, radius: NOISE.pick }]);
@@ -303,6 +348,26 @@ export function applyAction(state: RaidState, action: Action): RaidEvent[] {
       state.rocks--;
       say('A pedra quica lá longe. Cabeças se viram para o barulho.', 'info');
       endTurn(state, ev, [{ pos: { x: action.x, y: action.y }, radius: NOISE.rock }]);
+      break;
+    }
+    case 'shoot': {
+      const gun = firearm(state);
+      if (!gun || !canShootAt(state, action)) break;
+      const z = zombieAt(state, action.x, action.y)!;
+      loadRounds(state, gun.ammo ?? 1);
+      state.rounds -= gun.ammo ?? 1;
+      z.state = 'chasing';
+      z.target = { ...state.player };
+      if (chance(state, gun.hit)) {
+        // A espingarda pega também quem está colado no alvo, com metade do dano.
+        const around = gun.spread ? state.zombies.filter((o) => o !== z && chebyshev(o.pos, z.pos) === 1) : [];
+        hurtZombie(state, z, gun.damage, say);
+        for (const o of around) hurtZombie(state, o, Math.ceil(gun.damage / 2), say);
+      } else say('O tiro passa raspando.', 'warn');
+      wearWeapon(state, say);
+      // O estampido chama a horda: a próxima leva vem antes.
+      state.nextSpawnTurn = Math.max(state.turn + 1, state.nextSpawnTurn - 2);
+      endTurn(state, ev, [{ pos: { ...state.player }, radius: gun.noise }]);
       break;
     }
     case 'crack': {
@@ -355,8 +420,8 @@ function doMove(
 
   const z = zombieAt(state, nx, ny);
   if (z) {
-    attackZombie(state, z, say);
-    endTurn(state, ev, [{ pos: { ...state.player }, radius: NOISE.attack }]);
+    const noise = attackZombie(state, z, say);
+    endTurn(state, ev, [{ pos: { ...state.player }, radius: noise }]);
     return;
   }
 
@@ -371,7 +436,7 @@ function doMove(
   }
 
   state.player = { x: nx, y: ny };
-  const radius = hasTrait(state, 'silencioso') ? NOISE.quietStep : NOISE.step;
+  const radius = hasTrait(state, 'silencioso') || utilHas(state, 'quiet') ? NOISE.quietStep : NOISE.step;
   endTurn(state, ev, [{ pos: { ...state.player }, radius }]);
 }
 
@@ -384,21 +449,49 @@ export function canThrowAt(state: RaidState, p: Vec): boolean {
   return d >= 2 && d <= THROW_RANGE && lineOfSight(state, state.player, p);
 }
 
-function attackZombie(state: RaidState, z: Zombie, say: (t: string, tone?: EventTone) => void): void {
-  const hitChance = hasTrait(state, 'lutador') ? 0.9 : 0.7;
+/** Golpe corpo a corpo. Devolve o raio do barulho que fez. */
+function attackZombie(state: RaidState, z: Zombie, say: (t: string, tone?: EventTone) => void): number {
+  const w = meleeStats(state);
+  const hitChance = Math.min(0.95, w.hit + (hasTrait(state, 'lutador') ? 0.2 : 0));
   z.state = 'chasing';
   z.target = { ...state.player };
-  if (!chance(state, hitChance)) {
-    say('Você erra o golpe.', 'warn');
-    return;
-  }
-  z.hp -= hasCrowbar(state) ? 2 : 1;
+  // Golpe com arma branca gasta a arma, acertando ou não; coronhada e mão não gastam nada.
+  const swings = !!state.gear.weapon && w !== BUTT;
+  const hit = chance(state, hitChance);
+  if (!hit) say('Você erra o golpe.', 'warn');
+  else hurtZombie(state, z, w.damage, say);
+  if (swings) wearWeapon(state, say);
+  return w.noise;
+}
+
+function hurtZombie(state: RaidState, z: Zombie, damage: number, say: (t: string, tone?: EventTone) => void): void {
+  z.hp -= damage;
   if (z.hp <= 0) {
     state.zombies = state.zombies.filter((o) => o !== z);
     state.kills++;
     say(`O ${ZOMBIES[z.kind].name} cai e não levanta mais.`, 'good');
   } else {
     say(`Você acerta o ${ZOMBIES[z.kind].name}. Ele ainda vem.`, 'info');
+  }
+}
+
+/** Dá para atirar nesse ponto: tem zumbi, está no alcance, à vista e há bala. */
+export function canShootAt(state: RaidState, p: Vec): boolean {
+  const gun = firearm(state);
+  if (!gun || !Number.isInteger(p.x) || !Number.isInteger(p.y)) return false;
+  if (!zombieAt(state, p.x, p.y)) return false;
+  if (roundsLeft(state) < (gun.ammo ?? 1)) return false;
+  const d = manhattan(state.player, p);
+  return d >= 1 && d <= (gun.range ?? 0) && lineOfSight(state, state.player, p);
+}
+
+/** Abre um pente ou caixa da mochila quando as balas soltas acabam. */
+function loadRounds(state: RaidState, need: number): void {
+  while (state.rounds < need) {
+    const k = state.backpack.findIndex((it) => it === 'ammo' || it === 'ammo_box');
+    if (k < 0) return;
+    state.rounds += state.backpack[k] === 'ammo' ? 2 : 8;
+    state.backpack.splice(k, 1);
   }
 }
 
@@ -494,6 +587,12 @@ function biteAttempt(state: RaidState, z: Zombie, ev: RaidEvent[]): void {
   const def = ZOMBIES[z.kind];
   if (nextRandom(state) >= def.bite) {
     ev.push({ text: `Um ${def.name} avança, mas você se esquiva.`, tone: 'warn' });
+    return;
+  }
+  // Proteção: parte das mordidas não atravessa.
+  const armor = state.gear.armor ? GEAR[state.gear.armor.id] : undefined;
+  if (armor?.guard && chance(state, armor.guard)) {
+    ev.push({ text: `Um ${def.name} morde, mas ${ITEMS[state.gear.armor!.id].name.toLowerCase()} segura.`, tone: 'warn' });
     return;
   }
   state.survivor.hp--;

@@ -1,4 +1,5 @@
-import { ITEMS } from '../data/items';
+import { GEAR, SLOT_NAME, type Slot } from '../data/gear';
+import { ITEMS, RARITY_INFO } from '../data/items';
 import { banner, placeUrl } from './art';
 import { iconize } from './icons';
 import { LOCATIONS, RECIPES, RESOURCES, RISK_RULES, TASKS, locationById, type RecipeId, type ResourceId, type RiskRule, type TaskId } from '../data/shelter';
@@ -20,6 +21,23 @@ export interface HudEls {
   top: HTMLElement;
   /** Última linha do diário, logo abaixo do jogo. */
   ticker: HTMLElement;
+}
+
+/** Pedido de equipamento para a incursão (índices do arsenal; -1 = nada). */
+export interface RaidLoadout {
+  weapon: number;
+  pack: number;
+  armor: number;
+  util: number;
+  rounds: number;
+  bandages: number;
+}
+const EMPTY_LOADOUT: RaidLoadout = { weapon: -1, pack: -1, armor: -1, util: -1, rounds: 0, bandages: 0 };
+
+/** Nome do equipamento na cor da raridade. */
+function gearLabel(id: keyof typeof ITEMS): string {
+  const r = ITEMS[id].rarity;
+  return `${ITEMS[id].icon} <span class="${r === 'comum' ? '' : `rar-${r}`}" title="${RARITY_INFO[r].name}">${ITEMS[id].name}</span>`;
 }
 
 type Cmd =
@@ -45,14 +63,15 @@ type Cmd =
   | { cmd: 'skip'; hours: number }
   | { cmd: 'link' }
   | { cmd: 'push' }
-  | { cmd: 'skipTutorial' };
+  | { cmd: 'skipTutorial' }
+  | { cmd: 'repair'; index: number };
 
 export interface ShelterUiHooks {
   changed: () => void;
   /** Manda um comando ao backend; devolve o aviso de regra, se houver. */
   command: (cmd: ShelterCommand) => Promise<string | null>;
   setView: (v: View) => void;
-  startRaid: (survivorId: string, locationId: string, loadout: { weapon: boolean; bandages: number }) => void;
+  startRaid: (survivorId: string, locationId: string, loadout: RaidLoadout) => void;
   takeOver: (expId: number) => void;
   skip: (hours: number) => void;
   account: () => Account;
@@ -89,7 +108,8 @@ export class ShelterUi {
   private shownTab: Tab | null = null;
   private exp = { ids: new Set<string>(), risk: 'balanced' as RiskRule };
   private raidWho: string | null = null;
-  private loadout = { weapon: false, bandages: 0 };
+  /** Escolha antes da incursão: índice no arsenal de cada espaço (-1 = nada), balas e bandagens. */
+  private loadout: RaidLoadout = { ...EMPTY_LOADOUT };
   private error = '';
   private pushNote = '';
   private tutorial = loadTutorial();
@@ -111,7 +131,10 @@ export class ShelterUi {
       if (el.dataset.task) this.run({ cmd: 'task', id: el.dataset.task, task: el.value as TaskId });
       else if (el.name === 'exp-risk') this.exp.risk = el.value as RiskRule;
       else if (el.name === 'raid-who') this.raidWho = el.value;
-      else if (el.name === 'raid-weapon') this.loadout.weapon = (el as HTMLInputElement).checked;
+      else if (el.name.startsWith('raid-slot-')) {
+        this.loadout[el.name.slice(10) as Slot] = Number(el.value);
+        this.hooks.changed();
+      } else if (el.name === 'raid-rounds') this.loadout.rounds = Number(el.value);
       else if (el.name === 'raid-bandages') this.loadout.bandages = Number(el.value);
       else if (el.name === 'exp-who') {
         const box = el as HTMLInputElement;
@@ -170,10 +193,11 @@ export class ShelterUi {
           return;
         }
         this.hooks.startRaid(who.id, this.selected, {
-          weapon: this.loadout.weapon && s.resources.weapons >= 1,
+          ...this.loadout,
           bandages: Math.min(this.loadout.bandages, Math.floor(s.resources.bandages)),
+          rounds: Math.min(this.loadout.rounds, Math.floor(s.resources.ammo)),
         });
-        this.loadout = { weapon: false, bandages: 0 };
+        this.loadout = { ...EMPTY_LOADOUT };
         return;
       }
       case 'takeOver': this.hooks.takeOver(c.expId); return;
@@ -220,6 +244,7 @@ export class ShelterUi {
         return send({ type: 'standing', order: c.on ? { locationId: this.selected, ids: [...this.exp.ids], risk: this.exp.risk } : null });
       case 'queue': return send({ type: 'queue', recipe: c.recipe });
       case 'unqueue': return send({ type: 'unqueue', index: c.index });
+      case 'repair': return send({ type: 'repair', index: c.index });
       case 'evacuate': return send({ type: 'evacuate' });
     }
   }
@@ -419,7 +444,55 @@ export class ShelterUi {
       <div class="card"><h3>Em construção</h3>${project}${queue}
         <div class="small muted" style="margin-top:6px">${builders.length ? `Na tarefa Construir: ${builders.join(', ')}.` : 'Ninguém está na tarefa Construir. Mude a tarefa de alguém na aba Abrigo.'}</div>
       </div>
-      <div class="card"><h3>O que dá para fazer</h3><div class="recipes">${recipes}</div></div>`;
+      <div class="card"><h3>O que dá para fazer</h3><div class="recipes">${recipes}</div></div>
+      ${this.arsenalHtml(s)}`;
+  }
+
+  /** Arsenal: o equipamento guardado, com o desgaste das armas e o conserto na bancada. */
+  private arsenalHtml(s: ShelterState): string {
+    if (!s.arsenal.length) return '<div class="card"><h3>Arsenal</h3><div class="small muted">Vazio. Equipamento achado nas incursões fica guardado aqui.</div></div>';
+    const order: Slot[] = ['weapon', 'pack', 'armor', 'util'];
+    const rows = s.arsenal
+      .map((w, i) => ({ w, i, def: GEAR[w.id]! }))
+      .sort((a, b) => order.indexOf(a.def.slot) - order.indexOf(b.def.slot))
+      .map(({ w, i, def }) => {
+        const full = def.durability;
+        const worn = full ? ` <span class="${w.wear <= full / 4 ? 'bad' : 'muted'}">${w.wear}/${full}</span>` : '';
+        const fix = full && w.wear < full ? cmdBtn('Consertar · 1 peça', { cmd: 'repair', index: i }) : '';
+        return `<div class="row small"><span title="${def.note}">${gearLabel(w.id)}${worn} <span class="muted">· ${SLOT_NAME[def.slot].toLowerCase()}</span></span>${fix}</div>`;
+      })
+      .join('');
+    return `<div class="card"><h3>Arsenal</h3>${rows}<div class="small muted" style="margin-top:6px">Quem morre ou foge de uma incursão perde o que levou.</div></div>`;
+  }
+
+  /** Os quatro espaços, as balas e as bandagens para a incursão, com o que está em risco. */
+  private loadoutHtml(s: ShelterState, bandages: number): string {
+    const slots: Slot[] = ['weapon', 'pack', 'armor', 'util'];
+    const selects = slots
+      .map((slot) => {
+        const options = s.arsenal
+          .map((w, i) => ({ w, i }))
+          .filter(({ w }) => GEAR[w.id]?.slot === slot)
+          .map(({ w, i }) => {
+            const full = GEAR[w.id]?.durability;
+            return `<option value="${i}" ${this.loadout[slot] === i ? 'selected' : ''}>${ITEMS[w.id].name}${full ? ` (${w.wear}/${full})` : ''}</option>`;
+          });
+        if (!options.length) return '';
+        return `<label>${SLOT_NAME[slot]} <select name="raid-slot-${slot}"><option value="-1">${slot === 'weapon' ? 'mãos' : slot === 'pack' ? 'mochila escolar' : 'nada'}</option>${options.join('')}</select></label>`;
+      })
+      .join('');
+    const weapon = s.arsenal[this.loadout.weapon];
+    const gun = weapon && GEAR[weapon.id]?.weapon?.range;
+    const ammo = Math.min(12, Math.floor(s.resources.ammo));
+    const rounds = gun
+      ? `<label title="Balas do estoque. As que sobrarem voltam.">Balas <select name="raid-rounds">${Array.from({ length: ammo + 1 }, (_, n) => n)
+          .map((n) => `<option value="${n}" ${n === Math.min(this.loadout.rounds, ammo) ? 'selected' : ''}>${n}</option>`)
+          .join('')}</select></label>`
+      : '';
+    const risk = slots.map((slot) => s.arsenal[this.loadout[slot]]).filter(Boolean).map((w) => gearLabel(w.id));
+    return `<div class="who">${selects}${rounds}
+        <label>Bandagens <select name="raid-bandages" ${bandages ? '' : 'disabled'}>${[0, 1, 2].filter((n) => n <= bandages).map((n) => `<option value="${n}" ${n === Math.min(this.loadout.bandages, bandages) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      </div>${risk.length ? `<div class="small muted" style="margin-top:4px">Em risco se não voltar: ${risk.join(', ')}</div>` : ''}`;
   }
 
   /** Os passos do tutorial, cada um com o teste de "já fez" tirado do próprio estado. */
@@ -597,12 +670,8 @@ export class ShelterUi {
     const standing = st
       ? `<div class="row small"><span>🔁 Toda noite: ${st.ids.map((id) => s.survivors.find((v) => v.id === id)?.name ?? '?').join(' e ')} → ${locationById(st.locationId).name} <span class="muted">(${RISK_RULES[st.risk].name.toLowerCase()})</span></span>${cmdBtn('Cancelar ordem', { cmd: 'standing', on: false })}</div>`
       : '';
-    const weapons = Math.floor(s.resources.weapons);
     const bandages = Math.min(2, Math.floor(s.resources.bandages));
-    const gear = `<div class="who">
-        <label title="Dobra o dano e arromba portas. Perdida se o sobrevivente não voltar."><input type="checkbox" name="raid-weapon" ${this.loadout.weapon && weapons ? 'checked' : ''} ${weapons ? '' : 'disabled'}/> Levar arma (${weapons} no abrigo)</label>
-        <label>Bandagens <select name="raid-bandages" ${bandages ? '' : 'disabled'}>${[0, 1, 2].filter((n) => n <= bandages).map((n) => `<option value="${n}" ${n === Math.min(this.loadout.bandages, bandages) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-      </div>`;
+    const gear = this.loadoutHtml(s, bandages);
     const raidOptions = canRaid
       .map((v) => `<option value="${v.id}" ${v.id === this.raidWho ? 'selected' : ''}>${v.name} · saúde ${Math.round(v.health)}${v.sick ? ' · doente' : ''}</option>`)
       .join('');

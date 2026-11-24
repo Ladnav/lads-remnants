@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { SURVIVORS } from '../src/data/survivors';
 import { ZOMBIES } from '../src/data/zombies';
 import { applyCommand, finishRaid, openShelter, startRaid } from '../src/server/game';
-import { applyAction, canThrowAt, createRaid, START_ROCKS } from '../src/sim/raid/raid';
+import { applyAction, canShootAt, canThrowAt, capacity, createRaid, START_ROCKS } from '../src/sim/raid/raid';
 import type { RaidState } from '../src/sim/raid/types';
 import { REAL_MS_PER_GAME_HOUR } from '../src/sim/shelter/core';
 import { sendExpedition } from '../src/sim/shelter/expeditions';
-import { DORMANT_AFTER, createShelter, isDormant, isGameOver, tickHour } from '../src/sim/shelter/shelter';
+import { DORMANT_AFTER, createShelter, isDormant, isGameOver, migrate, tickHour } from '../src/sim/shelter/shelter';
 import type { RaidTicket, ShelterState } from '../src/sim/shelter/types';
 
 const NOW = 1_000_000;
@@ -72,27 +72,90 @@ describe('incursão ativa: limites', () => {
 });
 
 describe('equipamento', () => {
-  it('sai do estoque, entra na mochila e volta sem contar como achado', () => {
+  it('sai do arsenal, vai no corpo e volta com o desgaste, sem contar como achado', () => {
     const s = openShelter(null, NOW, 4);
     const stock = s.locationStock.market;
-    const t = ticket(s, { survivorId: 'lena', locationId: 'market', loadout: { weapon: true, bandages: 2 } });
+    expect(s.arsenal.map((w) => w.id)).toEqual(['knife']);
+    const t = ticket(s, { survivorId: 'lena', locationId: 'market', loadout: { weapon: 0, bandages: 2 } });
+    expect(s.arsenal).toHaveLength(0);
     expect(s.resources.weapons).toBe(0);
     expect(s.resources.bandages).toBe(0);
-    expect(t.opts.startItems).toEqual(['crowbar', 'bandage', 'bandage']);
+    expect(t.opts.startItems).toEqual(['bandage', 'bandage']);
+    expect(t.opts.gear?.weapon?.id).toBe('knife');
     const played = enterAndLeave(t);
-    expect(played.backpack).toHaveLength(3);
     finishRaid(s, t.id, played.log, NOW);
+    expect(s.arsenal.map((w) => w.id)).toEqual(['knife']);
     expect(s.resources.weapons).toBe(1);
     expect(s.resources.bandages).toBe(2);
     expect(s.locationStock.market).toBe(stock);
   });
 
-  it('recusa equipamento que o abrigo não tem', () => {
+  it('aceita o pedido antigo (weapon: true) e recusa o que o arsenal não tem', () => {
     const s = openShelter(null, NOW, 5);
-    s.resources.weapons = 0;
-    expect(startRaid(s, { survivorId: 'lena', locationId: 'market', loadout: { weapon: true } }, 1, NOW).ok).toBe(false);
-    expect(startRaid(s, { survivorId: 'lena', locationId: 'market', loadout: { bandages: 2 } }, 1, NOW).ok).toBe(true);
+    expect(startRaid(s, { survivorId: 'lena', locationId: 'market', loadout: { weapon: 3 } }, 1, NOW).ok).toBe(false);
+    expect(startRaid(s, { survivorId: 'lena', locationId: 'market', loadout: { pack: 0 } }, 1, NOW).ok).toBe(false);
+    const r = startRaid(s, { survivorId: 'lena', locationId: 'market', loadout: { weapon: true, bandages: 2 } }, 1, NOW);
+    expect(r.ok).toBe(true);
+    expect(s.arsenal).toHaveLength(0);
     expect(s.resources.bandages).toBe(0);
+  });
+
+  it('balas só saem do estoque com arma de fogo, e as que sobram voltam', () => {
+    const s = openShelter(null, NOW, 6);
+    s.arsenal.push({ id: 'revolver', wear: 30 });
+    s.resources.ammo = 10;
+    const t = ticket(s, { survivorId: 'lena', locationId: 'market', loadout: { weapon: 1, rounds: 6 } });
+    expect(t.opts.rounds).toBe(6);
+    expect(s.resources.ammo).toBe(4);
+    const played = enterAndLeave(t);
+    finishRaid(s, t.id, played.log, NOW);
+    expect(s.resources.ammo).toBe(10);
+    expect(s.arsenal.some((w) => w.id === 'revolver')).toBe(true);
+  });
+
+  it('saves antigos: as armas viram facas no arsenal', () => {
+    const s = openShelter(null, NOW, 7) as unknown as Record<string, unknown> & { resources: { weapons: number } };
+    delete s.arsenal;
+    s.resources.weapons = 3;
+    const m = migrate(s as never);
+    expect(m.arsenal.map((w) => w.id)).toEqual(['knife', 'knife', 'knife']);
+    expect(m.resources.weapons).toBe(3);
+  });
+});
+
+describe('armas e proteção na incursão', () => {
+  const clearLine = (r: ReturnType<typeof createRaid>, to: { x: number; y: number }) => {
+    for (let y = to.y; y < r.player.y; y++) r.tiles[y * r.width + r.player.x] = { kind: 'floor' };
+  };
+
+  it('revólver atira de longe, gasta bala e chama a horda', () => {
+    const r = createRaid(11, lena, { gear: { weapon: { id: 'revolver', wear: 30 } }, rounds: 3 });
+    const target = { x: r.player.x, y: r.player.y - 3 };
+    clearLine(r, target);
+    r.zombies = [{ id: 0, kind: 'walker', pos: target, hp: 2, state: 'idle', target: null, moveAcc: 0 }];
+    const spawnBefore = r.nextSpawnTurn;
+    expect(canShootAt(r, target)).toBe(true);
+    applyAction(r, { type: 'shoot', x: target.x, y: target.y });
+    expect(r.rounds).toBe(2);
+    expect(r.gear.weapon?.wear).toBe(29);
+    expect(r.nextSpawnTurn).toBeLessThanOrEqual(Math.max(r.turn + 1, spawnBefore - 2) + 8);
+    r.rounds = 0;
+    r.zombies = [{ id: 1, kind: 'walker', pos: target, hp: 2, state: 'idle', target: null, moveAcc: 0 }];
+    expect(canShootAt(r, target)).toBe(false);
+  });
+
+  it('a arma quebra no fim do desgaste e a luta volta para as mãos', () => {
+    const r = createRaid(12, lena, { gear: { weapon: { id: 'knife', wear: 1 } } });
+    const z = { x: r.player.x + 1, y: r.player.y };
+    r.tiles[z.y * r.width + z.x] = { kind: 'floor' };
+    r.zombies = [{ id: 0, kind: 'brute', pos: z, hp: 9, state: 'idle', target: null, moveAcc: 0 }];
+    applyAction(r, { type: 'move', dx: 1, dy: 0 });
+    expect(r.gear.weapon).toBeUndefined();
+  });
+
+  it('mochila maior carrega mais e o colete pesa', () => {
+    expect(capacity(createRaid(1, lena, { gear: { pack: { id: 'pack_military', wear: 0 } } }))).toBe(18);
+    expect(capacity(createRaid(1, lena, { gear: { armor: { id: 'vest', wear: 0 } } }))).toBe(9);
   });
 });
 

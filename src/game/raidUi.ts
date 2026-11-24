@@ -1,3 +1,4 @@
+import { GEAR } from '../data/gear';
 import { ITEMS, RARITY_INFO, type ItemId } from '../data/items';
 
 /** Nome do item na cor da raridade (comum fica na cor normal do texto). */
@@ -12,8 +13,11 @@ import {
   adjacentContainers,
   adjacentLockedDoors,
   applyAction,
+  canShootAt,
   canThrowAt,
   capacity,
+  firearm,
+  roundsLeft,
   carriedWeight,
   computeVisible,
   crackPlan,
@@ -43,6 +47,8 @@ export class RaidUi {
   private onDone: (actions: Action[]) => void = () => {};
   /** Modo de mira: o próximo clique no mapa arremessa uma pedra. */
   private throwing = false;
+  /** Mirando com a arma de fogo: o próximo clique num zumbi atira. */
+  private shooting = false;
   private face: string | null = null;
   /** Andar contínuo: direcional seguro ou caminho até um ponto tocado. */
   private walk: { timer: number; dir?: Vec; goal?: Vec; toContainer?: boolean } | null = null;
@@ -72,6 +78,7 @@ export class RaidUi {
     hud.addEventListener('click', (e) => {
       if (!this.state) return;
       if ((e.target as HTMLElement).closest('button[data-ui="throw"]')) return this.toggleThrow();
+      if ((e.target as HTMLElement).closest('button[data-ui="shoot"]')) return this.toggleShoot();
       const btn = (e.target as HTMLElement).closest('button[data-action]') as HTMLButtonElement | null;
       if (!btn) return;
       this.act(JSON.parse(btn.dataset.action!) as Action);
@@ -87,6 +94,7 @@ export class RaidUi {
   begin(ticket: RaidTicket, onDone: (actions: Action[]) => void): void {
     this.onDone = onDone;
     this.throwing = false;
+    this.shooting = false;
     const def = ticket.def;
     this.scene.setPlayer(def.id);
     this.face = faceUrl(def.id);
@@ -145,16 +153,37 @@ export class RaidUi {
       if (door) this.act({ type: k === 'p' ? 'pick' : 'force', x: door.x, y: door.y });
     } else if (k === 't') {
       this.toggleThrow();
+    } else if (k === 'g') {
+      this.toggleShoot();
     } else if (k === 'b') {
       const i = s.backpack.indexOf('bandage');
       if (i >= 0) this.act({ type: 'use', index: i });
     }
   }
 
+  /** Arma na mão com o desgaste, e as balas se for de fogo. */
+  private weaponTag(s: RaidState): string {
+    const w = s.gear.weapon;
+    if (!w) return '<span title="Sem arma: soco, dano 1">✊ mãos</span>';
+    const full = GEAR[w.id]?.durability ?? 1;
+    const gun = firearm(s);
+    return `<span title="${GEAR[w.id]?.note ?? ''}" class="${w.wear <= full / 4 ? 'bad' : ''}">${ITEMS[w.id].icon} ${w.wear}/${full}</span>${gun ? `<span title="Balas (contando pentes e caixas na mochila)" class="${roundsLeft(s) < (gun.ammo ?? 1) ? 'bad' : ''}">🔸 ${roundsLeft(s)}</span>` : ''}`;
+  }
+
   private toggleThrow(): void {
     const s = this.state;
     if (!s || s.status !== 'active') return;
     this.throwing = !this.throwing && s.rocks > 0;
+    this.shooting = false;
+    this.render();
+  }
+
+  private toggleShoot(): void {
+    const s = this.state;
+    if (!s || s.status !== 'active') return;
+    const gun = firearm(s);
+    this.shooting = !this.shooting && !!gun && roundsLeft(s) >= (gun.ammo ?? 1);
+    this.throwing = false;
     this.render();
   }
 
@@ -162,6 +191,15 @@ export class RaidUi {
     const s = this.state;
     if (!s || s.status !== 'active') return;
     this.stopWalk();
+    if (this.shooting) {
+      this.shooting = false;
+      if (canShootAt(s, p)) {
+        this.act({ type: 'shoot', x: p.x, y: p.y });
+        return;
+      }
+      this.log.push({ text: 'Não dá para atirar ali: sem zumbi, longe demais ou fora de vista.', tone: 'warn' });
+      return this.render();
+    }
     if (this.throwing) {
       this.throwing = false;
       if (canThrowAt(s, p)) {
@@ -277,13 +315,14 @@ export class RaidUi {
     const escaped = s.status === 'extracted';
     const wounds = s.survivor.maxHp - s.survivor.hp;
     const items = s.backpack.map(itemLabel).join(', ') || 'nada';
+    const worn = Object.values(s.gear).filter((w): w is NonNullable<typeof w> => !!w).map((w) => itemLabel(w.id)).join(', ');
     this.overlay.innerHTML = `
       <div class="modal">
         <h2 class="${escaped ? 'good' : 'bad'}">${escaped ? `${s.survivor.name} voltou para o abrigo` : `${s.survivor.name} não voltou`}</h2>
         <p>${
           escaped
-            ? `Trouxe: ${items}.<br/>Valor: <strong>${lootValue(s.backpack)}</strong> · Ferimentos: <strong class="${wounds ? 'warn' : ''}">${wounds}</strong> · Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}`
-            : `Ficou em ${s.site}, junto com ${items}. Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}.<br/>Essa perda é permanente.`
+            ? `Trouxe: ${items}.${worn ? `<br/>Equipamento de volta: ${worn}.` : ''}<br/>Valor: <strong>${lootValue(s.backpack)}</strong> · Ferimentos: <strong class="${wounds ? 'warn' : ''}">${wounds}</strong> · Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}`
+            : `Ficou em ${s.site}, junto com ${items}${worn ? ` e ${worn}` : ''}. Turnos: ${s.turn} · Zumbis abatidos: ${s.kills}.<br/>Essa perda é permanente.`
         }</p>
         <div class="actions"><button class="primary" id="raid-done">Voltar ao abrigo</button></div>
         <p style="font-size:11px">Semente ${s.seed} · ${s.log.length} ações registradas.</p>
@@ -324,6 +363,9 @@ export class RaidUi {
     const key = (k: string) => `<kbd>${k}</kbd>`;
     const actions: string[] = [btn(`Esperar ${key('Espaço')}`, { type: 'wait' }, 'kb-only')];
     actions.push(
+      ...(firearm(s)
+        ? [`<button data-ui="shoot" class="${this.shooting ? 'primary' : ''}" ${roundsLeft(s) >= (firearm(s)!.ammo ?? 1) ? '' : 'disabled'} title="Atira num zumbi a até ${firearm(s)!.range} casas. Barulho alto: chama a horda.">${this.shooting ? 'Clique no zumbi…' : `🔫 Atirar ${key('G')} · ${roundsLeft(s)}`}</button>`]
+        : []),
       `<button data-ui="throw" class="${this.throwing ? 'primary' : ''}" ${s.rocks > 0 ? '' : 'disabled'} title="Faz barulho longe de você: zumbis vão investigar">${this.throwing ? 'Clique onde jogar…' : `🪨 Arremessar pedra ${key('T')} · ${s.rocks}`}</button>`,
     );
     const here = exitAt(s, s.player);
@@ -372,7 +414,7 @@ export class RaidUi {
         <span class="tb-tags"><span title="Turno">⏱️ ${s.turn}</span>
           <span title="Zumbis à vista" class="${seenZombies ? 'warn' : ''}">🧟 ${seenZombies}</span>
           <span title="Turnos até a próxima leva da horda" class="${nextWave <= 2 ? 'bad' : ''}">📣 ${nextWave}</span>
-          <span title="Peso da mochila" class="${weight >= cap ? 'bad' : ''}">🎒 ${weight}/${cap}</span></span>
+          <span title="Peso da mochila" class="${weight >= cap ? 'bad' : ''}">🎒 ${weight}/${cap}</span>${this.weaponTag(s)}</span>
       </div>`;
     const last = this.log[this.log.length - 1];
     this.ticker.innerHTML = last ? `<div class="${last.tone === 'info' ? '' : last.tone}">› ${last.text}</div>` : '';

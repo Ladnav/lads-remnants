@@ -16,7 +16,20 @@ export type ItemId =
   | 'car_battery'
   | 'ammo_box'
   | 'toolkit'
-  | 'antibiotics';
+  | 'antibiotics'
+  // Equipamento (data/gear.ts): vai para o arsenal do abrigo, não vira recurso.
+  | 'knife'
+  | 'bat'
+  | 'machete'
+  | 'revolver'
+  | 'shotgun'
+  | 'pack_hiking'
+  | 'pack_military'
+  | 'jacket'
+  | 'vest'
+  | 'flashlight'
+  | 'lockpick_kit'
+  | 'soft_shoes';
 
 /** Raridade: decide a cor e a chance de aparecer (tabelas em sim/raid/loot.ts). */
 export type Rarity = 'comum' | 'incomum' | 'raro' | 'lendario';
@@ -57,6 +70,18 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   ammo_box: { name: 'Caixa de munição', weight: 2, value: 20, icon: '📦', rarity: 'lendario' },
   toolkit: { name: 'Maleta de ferramentas', weight: 3, value: 20, icon: '🧳', rarity: 'lendario' },
   antibiotics: { name: 'Antibiótico', weight: 0.5, value: 18, icon: '💉', rarity: 'lendario' },
+  knife: { name: 'Faca improvisada', weight: 0.5, value: 3, icon: '🔪', rarity: 'comum' },
+  bat: { name: 'Taco com pregos', weight: 2, value: 5, icon: '🏏', rarity: 'incomum' },
+  machete: { name: 'Facão', weight: 1, value: 9, icon: '🗡️', rarity: 'raro' },
+  revolver: { name: 'Revólver', weight: 1, value: 14, icon: '🔫', rarity: 'raro' },
+  shotgun: { name: 'Espingarda', weight: 3, value: 22, icon: '🔫', rarity: 'lendario' },
+  pack_hiking: { name: 'Mochila de trilha', weight: 1, value: 8, icon: '🎒', rarity: 'incomum' },
+  pack_military: { name: 'Mochila militar', weight: 1.5, value: 20, icon: '🎒', rarity: 'lendario' },
+  jacket: { name: 'Jaqueta de couro', weight: 1, value: 7, icon: '🧥', rarity: 'incomum' },
+  vest: { name: 'Colete', weight: 2, value: 14, icon: '🦺', rarity: 'raro' },
+  flashlight: { name: 'Lanterna', weight: 0.5, value: 6, icon: '🔦', rarity: 'incomum' },
+  lockpick_kit: { name: 'Kit de gazua', weight: 0.5, value: 12, icon: '🪛', rarity: 'raro' },
+  soft_shoes: { name: 'Tênis macio', weight: 0.5, value: 6, icon: '👟', rarity: 'incomum' },
 };
 
 export interface ContainerDef {
@@ -71,7 +96,7 @@ export interface ContainerDef {
 // Tipos de container do mercado e o que costumam guardar.
 export const CONTAINERS: readonly ContainerDef[] = [
   { name: 'Prateleira', tier: 1, loot: ['canned_food', 'canned_food', 'water', 'water', 'wood'], min: 0, max: 3 },
-  { name: 'Balcão', tier: 1, loot: ['bandage', 'medicine', 'water', 'ammo'], min: 0, max: 2 },
-  { name: 'Caixa de ferramentas', tier: 2, loot: ['scrap', 'parts', 'parts', 'crowbar', 'fuel'], min: 1, max: 2 },
-  { name: 'Armário', tier: 2, loot: ['components', 'bandage', 'scrap', 'canned_food', 'ammo'], min: 0, max: 2 },
+  { name: 'Balcão', tier: 1, loot: ['bandage', 'medicine', 'water', 'ammo', 'knife', 'flashlight'], min: 0, max: 2 },
+  { name: 'Caixa de ferramentas', tier: 2, loot: ['scrap', 'parts', 'parts', 'crowbar', 'fuel', 'bat', 'lockpick_kit', 'toolkit', 'car_battery'], min: 1, max: 2 },
+  { name: 'Armário', tier: 2, loot: ['components', 'bandage', 'scrap', 'canned_food', 'ammo', 'jacket', 'pack_hiking', 'soft_shoes', 'machete', 'first_aid'], min: 0, max: 2 },
 ];

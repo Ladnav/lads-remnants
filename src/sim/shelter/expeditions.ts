@@ -1,7 +1,8 @@
+import { isGear } from '../../data/gear';
 import { ITEMS, type ItemId } from '../../data/items';
-import { ITEM_TO_RESOURCES, RISK_RULES, locationById, type RiskRule } from '../../data/shelter';
+import { RISK_RULES, locationById, type RiskRule } from '../../data/shelter';
 import { chance, pick, randInt } from '../rng';
-import { FRIEND, RIVAL, addBond, addResources, bondOf, clamp, die, hourOfDay, log } from './core';
+import { FRIEND, RIVAL, addBond, bondOf, clamp, die, hourOfDay, log, stashItem } from './core';
 import type { Expedition, ShelterState, ShelterSurvivor } from './types';
 
 /** Horas depois da partida em que uma expedição pode se meter em apuros. */
@@ -166,8 +167,10 @@ function resolveExpedition(s: ShelterState, exp: Expedition, skipId?: string): v
     let rolls = rule.loot + (v.traits.includes('forte') ? 2 : 0) - (v.traits.includes('medroso') ? 1 : 0);
     if (trapped > 1) rolls = Math.floor(rolls / 2);
     rolls = Math.max(0, Math.round(rolls * (0.4 + 0.6 * (stock / 100))));
-    const items: ItemId[] = Array.from({ length: rolls }, () => pick(s, loc.loot));
-    for (const it of items) addResources(s, ITEM_TO_RESOURCES[it]);
+    // Expedição automática traz o básico; equipamento e coisa rara só na incursão que você joga.
+    const basic = loc.loot.filter((it) => !isGear(it) && ITEMS[it].rarity !== 'lendario' && ITEMS[it].rarity !== 'raro');
+    const items: ItemId[] = Array.from({ length: rolls }, () => pick(s, basic.length ? basic : loc.loot));
+    for (const it of items) stashItem(s, it);
     s.locationStock[loc.id] = Math.max(10, (s.locationStock[loc.id] ?? 100) - rolls * 2);
     v.fatigue = clamp(v.fatigue + 30);
     if (items.length) {
