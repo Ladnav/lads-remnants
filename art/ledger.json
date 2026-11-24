@@ -698,6 +698,15 @@
       "textTokens": 494,
       "imageTokens": 1120,
       "usd": 0.141
+    },
+    {
+      "at": "2026-11-24T06:04:31.963Z",
+      "job": "pixel-props3",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 388,
+      "textTokens": 740,
+      "imageTokens": 1120,
+      "usd": 0.1441
     }
   ]
 }

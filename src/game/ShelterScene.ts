@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { emotionOf, hourOfDay, isNight } from '../sim/shelter/core';
 import type { ShelterState, ShelterSurvivor } from '../sim/shelter/types';
-import { TILE, WALL_H, box, feet, rowDepth, setupObliqueCamera, smoothPainted, wall } from './oblique';
-import { artUrl } from './art';
+import { TILE, WALL_H, feet, rowDepth, setupObliqueCamera, smoothPainted } from './oblique';
+import { footShadow, paintHouse, type FloorKind } from './pixelHouse';
 import { ensureIcon, iconFor } from './icons';
-import { NightLight, makeRain, softShadow, type LightSource, type OpenArea } from './night';
+import { NightLight, makeRain, type LightSource, type OpenArea } from './night';
 import { Actor, preloadBodies, survivorLook, type Pose } from './sprites';
 
 const W = 28;
@@ -19,8 +19,10 @@ const WALLS: [P, P][] = [
   [[0, 8], [17, 8]],
   [[0, 14], [17, 14]],
   [[6, 15], [6, 18]],
+  // Fundos da oficina, com uma passagem larga para o quintal.
+  [[19, 8], [26, 8]],
 ];
-const GAPS: P[] = [[10, 4], [18, 4], [18, 11], [5, 8], [14, 8], [3, 14], [12, 14], [6, 17]];
+const GAPS: P[] = [[10, 4], [18, 4], [18, 11], [5, 8], [14, 8], [3, 14], [12, 14], [6, 17], [22, 8], [23, 8]];
 const FRONT_DOOR: P = [12, 19];
 
 const ROOMS: { name: string; at: P }[] = [
@@ -33,16 +35,80 @@ const ROOMS: { name: string; at: P }[] = [
   { name: 'DEPÓSITO', at: [7, 15] },
 ];
 
-const BED_SLOTS: P[] = [[2, 3], [5, 3], [8, 3], [2, 6], [5, 6], [8, 6]];
+/**
+ * Camas encostadas na parede de cima do dormitório e na de baixo, com um corredor no meio e a porta
+ * da sala livre. `slot` é o tile de quem dorme nela; `cx`/`top` são da imagem (pixel/house/bed.png, 47×73).
+ */
+const BEDS: { slot: P; cx: number; top: number }[] = [
+  { slot: [2, 3], cx: 70, top: 22 },
+  { slot: [5, 3], cx: 154, top: 22 },
+  { slot: [8, 3], cx: 238, top: 22 },
+  { slot: [2, 7], cx: 56, top: 135 },
+  { slot: [7, 7], cx: 196, top: 135 },
+  { slot: [9, 7], cx: 252, top: 135 },
+];
+const BED_SLOTS: P[] = BEDS.map((b) => b.slot);
+const BED_H = 73;
+/** Quem dorme fica com os pés aqui: a cabeça cai no travesseiro. */
+const SLEEP_DY = 66;
+
+/** Tiles de referência de cada construção (luz, e onde fica o risco de giz quando não existe). */
 const STATIONS = {
-  workbench: [22, 3] as P,
-  stove: [14, 3] as P,
-  filter: [25, 6] as P,
-  latrine: [3, 17] as P,
+  workbench: [22, 2] as P,
+  stove: [12, 2] as P,
+  filter: [25, 2] as P,
+  latrine: [1, 16] as P,
   radio: [16, 10] as P,
   collectors: [[21, 10], [25, 10]] as P[],
   gardens: [[20, 15], [24, 15]] as P[],
 };
+
+/** Um móvel em pixel art: imagem pixel/house/<key>.png com a base em (cx, bottom) e os tiles que ocupa. */
+interface Furn {
+  key: string;
+  cx: number;
+  bottom: number;
+  block: P[];
+  /** Fração da altura da imagem que é tampo (profundidade da sombra no chão). */
+  depth?: number;
+}
+
+/** Construções, encostadas nas paredes como numa casa de verdade. */
+const BUILT: Record<'stove' | 'workbench' | 'filter' | 'radio' | 'latrine', Furn> = {
+  stove: { key: 'stove', cx: 350, bottom: 92, block: [[12, 1], [12, 2]] },
+  workbench: { key: 'workbench', cx: 630, bottom: 78, block: [[21, 1], [22, 1], [23, 1], [21, 2], [22, 2], [23, 2]] },
+  filter: { key: 'filter', cx: 714, bottom: 80, block: [[25, 1], [25, 2]], depth: 0.3 },
+  radio: { key: 'radio', cx: 462, bottom: 312, block: [[16, 9], [16, 10]], depth: 0.3 },
+  latrine: { key: 'latrine', cx: 46, bottom: 468, block: [[1, 15], [1, 16]] },
+};
+/** Coletor de chuva: barril azul sobre blocos, na borda do quintal. */
+const COLLECTORS: Furn[] = STATIONS.collectors.map(([x, y]) => ({ key: 'barrel', cx: x * TILE + 14, bottom: 300, block: [[x, y - 1], [x, y]], depth: 0.3 }));
+
+/** Móveis que sempre estiveram na casa. */
+const DECOR: Furn[] = [
+  { key: 'shelf', cx: 434, bottom: 70, block: [[15, 1], [15, 2]] },
+  { key: 'chair', cx: 404, bottom: 136, block: [] },
+  { key: 'table', cx: 406, bottom: 168, block: [[14, 5]], depth: 0.5 },
+  { key: 'shelf', cx: 280, bottom: 298, block: [[9, 9], [10, 9]] },
+  { key: 'chair', cx: 222, bottom: 304, block: [] },
+  { key: 'table', cx: 224, bottom: 340, block: [[7, 11], [8, 11]], depth: 0.5 },
+  { key: 'scrap', cx: 574, bottom: 206, block: [[20, 7]], depth: 0.6 },
+  { key: 'lantern', cx: 128, bottom: 134, block: [], depth: 0.25 },
+  { key: 'bucket', cx: 84, bottom: 446, block: [], depth: 0.4 },
+];
+
+/**
+ * Trilhas pisadas no quintal (pixels do mundo): da porta da sala até os coletores e, entre as duas
+ * hortas, até o fundo.
+ */
+const YARD_PATHS: [number, number][][] = [
+  [[530, 322], [572, 326], [612, 338], [652, 372], [658, 420], [658, 500]],
+  [[612, 338], [668, 330], [714, 316]],
+  [[612, 338], [602, 318]],
+  [[612, 338], [640, 300], [644, 250]],
+];
+
+const HOUSE_PROPS = ['bed', 'stove', 'workbench', 'filter', 'radio', 'latrine', 'garden', 'barricade', 'crates', 'sacks', 'barrel', 'shelf', 'table', 'chair', 'scrap', 'lantern', 'bucket'];
 
 const SPOTS: Record<string, P[]> = {
   rest: [[3, 11], [6, 12], [9, 11], [12, 12], [15, 11], [4, 12]],
@@ -50,7 +116,7 @@ const SPOTS: Record<string, P[]> = {
   garden: [[21, 14], [25, 14], [22, 17], [26, 17]],
   clean: [[4, 16], [9, 16], [13, 17], [16, 16]],
   guard: [[11, 17], [13, 17], [12, 16], [10, 16]],
-  floorSleep: [[3, 4], [6, 4], [8, 5], [3, 7], [7, 7], [9, 4]],
+  floorSleep: [[3, 4], [5, 5], [7, 4], [9, 4], [4, 5], [6, 4]],
 };
 
 const DIRS: P[] = [[0, 1], [1, 0], [-1, 0], [0, -1]];
@@ -73,72 +139,20 @@ const isWall = (() => {
   return (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && grid[y * W + x];
 })();
 
+/** A borda de fora do quintal é cerca de madeira, não parede da casa. */
+const isFence = (x: number, y: number): boolean => (x === W - 1 && y >= 9) || (y === H - 1 && x >= 19);
+
 const isYard = (x: number, y: number) => x >= 19 && y >= 9 && y <= 18;
 
-/** Número estável por tile, para variar o chão sem sortear a cada desenho. */
-const hash = (x: number, y: number, k = 0): number => (((x * 73856093) ^ (y * 19349663) ^ (k * 83492791)) >>> 0) % 1000;
-
-type FloorKind = 'yard' | 'tile' | 'concrete' | 'wood';
-/** Piso de cada cômodo: quintal de terra, cozinha e latrina de azulejo, oficina e depósito de cimento. */
+/** Piso de cada cômodo: quintal de mato com trilha, cozinha e latrina de azulejo, oficina e depósito de cimento. */
 const floorOf = (x: number, y: number): FloorKind => {
-  if (isYard(x, y)) return 'yard';
+  if (isYard(x, y)) return 'grass';
   if (x >= 19) return 'concrete';
   if (x >= 11 && x <= 17 && y <= 7) return 'tile';
   if (y >= 15 && x <= 5) return 'tile';
   if (y >= 15 && x >= 7 && x <= 17) return 'concrete';
   return 'wood';
 };
-
-function floorTile(f: Phaser.GameObjects.Graphics, x: number, y: number, px: number, py: number): void {
-  const h = hash(x, y);
-  switch (floorOf(x, y)) {
-    case 'yard': {
-      f.fillStyle([0x3b4a24, 0x37451f, 0x3f4a26, 0x414427][h % 4]).fillRect(px, py, TILE, TILE);
-      // Terra batida e tufos de mato.
-      if (h % 5 === 0) f.fillStyle(0x4a3f2a, 0.7).fillEllipse(px + 8 + (h % 12), py + 10 + (h % 9), 16, 9);
-      for (let k = 0; k < 3; k++) {
-        const t = hash(x, y, k + 1);
-        f.fillStyle(t % 3 ? 0x4c5e2e : 0x5d6b33).fillRect(px + (t % 25), py + ((t >> 3) % 22) + 2, 2, 3 + (t % 3));
-      }
-      break;
-    }
-    case 'tile': {
-      f.fillStyle(h % 7 ? 0x6a665a : 0x5f5b50).fillRect(px, py, TILE, TILE);
-      f.lineStyle(1, 0x45423a, 0.9);
-      for (let k = 0; k <= TILE; k += 7) {
-        f.lineBetween(px + k, py, px + k, py + TILE);
-        f.lineBetween(px, py + k, px + TILE, py + k);
-      }
-      // Azulejo quebrado e encardido aqui e ali.
-      if (h % 6 === 0) f.fillStyle(0x3d3a33).fillRect(px + 7 * (h % 4), py + 7 * ((h >> 2) % 4), 7, 7);
-      if (h % 9 === 0) f.fillStyle(0x4a4030, 0.5).fillEllipse(px + 14, py + 14, 20, 12);
-      break;
-    }
-    case 'concrete': {
-      f.fillStyle([0x504d47, 0x4c4943, 0x54514a][h % 3]).fillRect(px, py, TILE, TILE);
-      if (h % 4 === 0) f.fillStyle(0x3f3c37, 0.6).fillEllipse(px + 6 + (h % 16), py + 8 + (h % 13), 14 + (h % 8), 8);
-      if (h % 7 === 0) {
-        // Rachadura.
-        f.lineStyle(1, 0x2f2d29, 0.9).lineBetween(px + (h % 10), py + 2, px + 12 + (h % 9), py + 14);
-        f.lineBetween(px + 12 + (h % 9), py + 14, px + 8 + (h % 14), py + TILE - 2);
-      }
-      break;
-    }
-    default: {
-      // Tábuas: cada uma num tom, com emendas, nós e manchas.
-      for (const half of [0, 1]) {
-        const t = hash(x, y, half + 7);
-        f.fillStyle([0x4a3b2c, 0x46382a, 0x4e3e2e, 0x433527][t % 4]).fillRect(px, py + half * (TILE / 2), TILE, TILE / 2);
-        const joint = (x + y + half) % 2 ? 8 : 20;
-        f.lineStyle(1, 0x33281d, 0.9).lineBetween(px + joint, py + half * (TILE / 2), px + joint, py + (half + 1) * (TILE / 2));
-        if (t % 9 === 0) f.fillStyle(0x33281d).fillRect(px + 3 + (t % 20), py + half * (TILE / 2) + 5, 2, 2);
-      }
-      f.lineStyle(1, 0x33281d, 0.9).lineBetween(px, py + TILE / 2, px + TILE, py + TILE / 2);
-      f.lineBetween(px, py + TILE, px + TILE, py + TILE);
-      if (h % 13 === 0) f.fillStyle(0x2c2219, 0.45).fillEllipse(px + 14, py + 14, 22, 13);
-    }
-  }
-}
 
 interface Sprite {
   actor: Actor;
@@ -149,6 +163,8 @@ interface Sprite {
   path: P[];
   /** Como fica ao chegar: em pé, na cama ou no chão. */
   pose: Pose;
+  /** Posição exata ao chegar (na cama), em vez dos pés no meio do tile. */
+  restAt: { x: number; y: number } | null;
   /** Está indo embora pela porta; some ao chegar nela. */
   leaving: boolean;
 }
@@ -158,10 +174,7 @@ export class ShelterScene extends Phaser.Scene {
   ready = false;
 
   private floor!: Phaser.GameObjects.Graphics;
-  private rows: Phaser.GameObjects.Graphics[] = [];
   private night!: NightLight;
-  /** Verdadeiro quando a pintura do abrigo carregou; senão a casa é desenhada por código. */
-  private painted = false;
   private rain!: Phaser.GameObjects.Particles.ParticleEmitter;
   private sprites = new Map<string, Sprite>();
   private decor: Phaser.GameObjects.GameObject[] = [];
@@ -178,8 +191,7 @@ export class ShelterScene extends Phaser.Scene {
 
   preload(): void {
     preloadBodies(this);
-    if (!this.textures.exists('shelter-bg')) this.load.image('shelter-bg', artUrl('shelter'));
-    for (const key of PROPS) if (!this.textures.exists(key)) this.load.image(key, artUrl(key));
+    for (const k of HOUSE_PROPS) if (!this.textures.exists(`house-${k}`)) this.load.image(`house-${k}`, `pixel/house/${k}.png`);
   }
 
   create(): void {
@@ -191,18 +203,16 @@ export class ShelterScene extends Phaser.Scene {
     // Se a casa não couber inteira (celular), começa olhando para a sala, perto da porta.
     setupObliqueCamera(this, W * TILE, H * TILE, { x: 10 * TILE, y: 12 * TILE });
     smoothPainted(this);
-    this.painted = [...PROPS, 'shelter-bg'].every((k) => this.textures.exists(k) && this.textures.get(k).key !== '__MISSING');
-    if (this.painted) this.buildPainted();
+    this.buildHouse();
     this.floor = this.add.graphics().setDepth(1);
-    this.rows = Array.from({ length: H }, (_, y) => this.add.graphics().setDepth(rowDepth(y, 5)));
     for (const r of ROOMS) {
-      this.add.text(r.at[0] * TILE + 4, r.at[1] * TILE + 3, r.name, { fontFamily: 'monospace', fontSize: '10px', color: '#c9bba3' }).setAlpha(0.55).setDepth(1);
+      this.add.text(r.at[0] * TILE + 4, r.at[1] * TILE + 6, r.name, { fontFamily: 'monospace', fontSize: '9px', color: '#e8dfcc' }).setAlpha(0.45).setDepth(1);
     }
-    this.night = new NightLight(this, W * TILE, H * TILE + WALL_H);
+    this.night = new NightLight(this, W * TILE, H * TILE + WALL_H, { tile: TILE, cols: W, rows: H, opaque: isWall });
     this.time.addEvent({ delay: 1400, loop: true, callback: () => this.fidget() });
     this.time.addEvent({ delay: 170, loop: true, callback: () => this.night.flicker() });
     // Chuva no quintal, a única parte da casa sem telhado.
-    this.rain = makeRain(this, 19 * TILE, 8 * TILE, 27 * TILE, 18 * TILE);
+    this.rain = makeRain(this, 19 * TILE, 9 * TILE, 27 * TILE, 18 * TILE);
     // Poeira flutuando dentro de casa: quase invisível, mas tira a sensação de quadro parado.
     if (!this.textures.exists('mote')) {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
@@ -236,223 +246,107 @@ export class ShelterScene extends Phaser.Scene {
     const h = hourOfDay(s.hour);
     // De dia a casa é mais escura que o quintal, que não tem telhado; à noite o quintal tem só a lua.
     const dusk = h === 20 || h === 6;
-    const yard: OpenArea = { x: 19 * TILE, y: 9 * TILE, w: 8 * TILE, h: 10 * TILE, amount: isNight(h) ? 0.3 : dusk ? 0.55 : 0.9 };
+    const yard: OpenArea = { x: 19 * TILE, y: 9 * TILE, w: 8 * TILE, h: 10 * TILE, amount: isNight(h) ? 0.3 : dusk ? 0.5 : 0.72 };
     const day = !isNight(h) && !dusk;
-    this.night.set(isNight(h) ? 0.68 : dusk ? 0.45 : 0.3, day ? this.lightSources(s).filter((l) => l.fire) : this.lightSources(s), [yard]);
+    // De dia a casa fica só na penumbra, sem focos (em degraus, um foco de dia vira uma mancha clara).
+    this.night.set(isNight(h) ? 0.72 : dusk ? 0.5 : 0.32, day ? [] : this.lightSources(s), [yard]);
     if (this.rain.emitting !== s.raining) s.raining ? this.rain.start() : this.rain.stop();
   }
 
   /**
-   * A casa pintada (npm run art -- shelter) foi feita sobre a planta exata do jogo.
-   * O fundo vai inteiro para o chão; as paredes são recortes da mesma imagem, uma faixa
-   * por linha, para as pessoas continuarem passando atrás delas.
+   * Casa em pixel art (pixelHouse.ts): o chão vai inteiro para o fundo; as paredes são recortes da
+   * mesma textura, uma faixa por linha, para as pessoas continuarem passando atrás delas.
    */
-  private buildPainted(): void {
-    const src = this.textures.get('shelter-bg').getSourceImage();
-    const k = src.width / (W * TILE);
-    const piece = () => this.add.image(0, -WALL_H, 'shelter-bg').setOrigin(0).setDisplaySize(W * TILE, BG_H).setTint(BG_TINT);
-    piece().setDepth(0);
+  private buildHouse(): void {
+    paintHouse(this, 'house', { cols: W, rows: H, isWall, floorOf, door: FRONT_DOOR, paths: YARD_PATHS, fence: isFence });
+    this.add.image(0, -WALL_H, 'house-floor').setOrigin(0).setDepth(0);
+    const solid = (x: number, y: number) => isWall(x, y) || (x === FRONT_DOOR[0] && y === FRONT_DOOR[1]);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        if (!isWall(x, y)) continue;
-        // Junta os tiles de parede vizinhos da linha num recorte só.
-        let end = x;
+        if (!solid(x, y)) continue;
+        // Junta os tiles vizinhos da linha que têm (ou não têm) face num recorte só.
         const front = !isWall(x, y + 1);
-        while (isWall(end + 1, y) && !isWall(end + 1, y + 1) === front) end++;
+        let end = x;
+        while (solid(end + 1, y) && !isWall(end + 1, y + 1) === front) end++;
         const h = TILE + (front ? WALL_H : 0);
-        piece().setCrop(x * TILE * k, y * TILE * k, (end - x + 1) * TILE * k, h * k).setDepth(rowDepth(y, 5));
+        this.add.image(0, -WALL_H, 'house-walls').setOrigin(0).setCrop(x * TILE, y * TILE, (end - x + 1) * TILE, h).setDepth(rowDepth(y, 5));
         x = end;
       }
     }
-    if (!this.textures.exists('shelter-vignette')) {
-      const w = W * TILE;
-      const h = H * TILE + WALL_H;
-      const tex = this.textures.createCanvas('shelter-vignette', w, h)!;
-      const ctx = tex.getContext();
-      const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.4, w / 2, h / 2, w * 0.72);
-      grad.addColorStop(0, 'rgba(5, 5, 6, 0)');
-      grad.addColorStop(1, 'rgba(5, 5, 6, 0.55)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
-      tex.refresh();
-    }
-    this.add.image(0, -WALL_H, 'shelter-vignette').setOrigin(0).setDepth(80000);
   }
 
-  /** Móvel pintado: base no chão em (cx, baseY), com a largura dada em tiles. */
-  private prop(key: string, cx: number, baseY: number, widthTiles: number, row: number): Phaser.GameObjects.Image {
-    const img = this.add.image(cx, baseY, key).setOrigin(0.5, 1).setDepth(rowDepth(row, 6)).setTint(0xcbc4b8);
-    img.setScale((widthTiles * TILE) / img.width);
-    this.decor.push(img);
-    // Sombra de contato debaixo do objeto, não abaixo dele: a mancha ocupa a "pegada" no chão,
-    // que na vista de cima é a metade de baixo da imagem. Uma faixa mais escura cola a base.
-    const w = widthTiles * TILE;
-    const footprint = Math.min(img.displayHeight * 0.55, w * 0.6);
-    const shadow = softShadow(this);
-    this.decor.push(
-      this.add.image(cx + 1, baseY - footprint * 0.45, shadow).setDisplaySize(w * 1.12, footprint * 1.1).setAlpha(0.6).setDepth(2),
-      this.add.image(cx, baseY - 2, shadow).setDisplaySize(w * 0.85, 6).setAlpha(0.55).setDepth(2),
-    );
+  /** Móvel em pixel art com a base em (cx, bottom) e a sombra da área que ele ocupa no chão. */
+  private prop(key: string, cx: number, bottom: number, depthFrac = 0.34, layer = 6): Phaser.GameObjects.Image {
+    const tex = `house-${key}`;
+    const img = this.add.image(Math.round(cx), Math.round(bottom), tex).setOrigin(0.5, 1);
+    img.setDepth(rowDepth(Math.floor((bottom - 1) / TILE), layer));
+    const shadow = this.add.image(Math.round(cx - img.width / 2) - 1, Math.round(bottom) - img.height, footShadow(this, tex, depthFrac)).setOrigin(0).setDepth(2);
+    this.decor.push(img, shadow);
     return img;
   }
 
-  private drawPainted(s: ShelterState): void {
-    const f = this.floor;
-    const mark = (px: number, py: number, w: number, h: number) => {
-      f.lineStyle(1, 0xf1ebe0, 0.28).strokeRect(px + 3.5, py + 3.5, w - 7, h - 7);
-      f.lineStyle(1, 0xf1ebe0, 0.16).lineBetween(px + 6, py + 6, px + w - 6, py + h - 6);
-    };
-    const [dx, dy] = FRONT_DOOR;
-    if (s.buildings.barricade > 0) this.prop('prop-barricade', dx * TILE + TILE / 2, dy * TILE - 3, 2 + s.buildings.barricade * 0.45, dy - 1);
-    BED_SLOTS.forEach(([x, y], i) => {
-      if (i < s.buildings.bed) this.prop('prop-bed', x * TILE + TILE / 2, (y + 1) * TILE + 3, 1.6, y);
-    });
-    const station = (p: P, key: string, built: boolean, widthTiles: number) => {
-      if (built) this.prop(key, p[0] * TILE + TILE / 2, (p[1] + 1) * TILE - 2, widthTiles, p[1]);
-      else mark(p[0] * TILE, p[1] * TILE, TILE, TILE);
-    };
-    station(STATIONS.workbench, 'prop-workbench', s.buildings.workbench > 0, 1.9);
-    station(STATIONS.stove, 'prop-stove', s.buildings.stove > 0, 0.95);
-    station(STATIONS.filter, 'prop-filter', s.buildings.filter > 0, 1.05);
-    station(STATIONS.latrine, 'prop-latrine', s.buildings.latrine > 0, 1.25);
-    station(STATIONS.radio, 'prop-radio', s.buildings.radio > 0, 1.3);
-    STATIONS.collectors.forEach((p, i) => station(p, 'prop-collector', i < s.buildings.rainCollector, 1.5));
-    STATIONS.gardens.forEach((p, i) => {
-      const px = p[0] * TILE;
-      const py = p[1] * TILE;
-      if (i < s.buildings.garden) {
-        const bed = this.prop('prop-garden', px + TILE * 1.5, py + TILE * 2 - 2, 3, p[1] + 1);
-        // Horta sem água perde o verde.
-        if (!s.gardenWatered) bed.setTint(0xc9b48a);
-      } else {
-        mark(px, py, TILE * 3, TILE * 2);
-      }
-    });
-    // Depósito: as pilhas crescem com o estoque de comida, água e material.
-    [s.resources.food, s.resources.water, s.resources.wood + s.resources.scrap].forEach((amount, i) => {
-      if (amount < 1) return;
-      this.prop('prop-crates', (9 + i * 3) * TILE, 18 * TILE - 4, 0.75 + Math.min(4, Math.ceil(amount / 4)) * 0.16, 17).setFlipX(i === 1);
-    });
-    if (s.resources.waste > 6) {
-      const n = Math.min(10, Math.floor(s.resources.waste / 2));
-      for (let k = 0; k < n; k++) f.fillStyle(0x2a2718, 0.8).fillEllipse((2 + ((k * 7) % 4)) * TILE + 10, (15 + (k % 3)) * TILE + 14, 12 + (k % 3) * 3, 7);
-    }
+  private furn(f: Furn): Phaser.GameObjects.Image {
+    return this.prop(f.key, f.cx, f.bottom, f.depth);
   }
 
   private drawHouse(s: ShelterState): void {
     const f = this.floor;
     f.clear();
-    for (const g of this.rows) g.clear();
     for (const o of this.decor) o.destroy();
     this.decor = [];
-    if (this.painted) return this.drawPainted(s);
-
-    f.fillStyle(0x0a0908).fillRect(0, -WALL_H, W * TILE, H * TILE + WALL_H);
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        if (isWall(x, y)) continue;
-        const px = x * TILE;
-        const py = y * TILE;
-        floorTile(f, x, y, px, py);
-      }
-    }
-    // Sombra onde o chão encontra as paredes: dá peso à casa.
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        if (isWall(x, y)) continue;
-        const px = x * TILE;
-        const py = y * TILE;
-        if (isWall(x, y - 1)) {
-          f.fillStyle(0x000000, 0.3).fillRect(px, py, TILE, 4);
-          f.fillStyle(0x000000, 0.16).fillRect(px, py + 4, TILE, 5);
-          f.fillStyle(0x000000, 0.07).fillRect(px, py + 9, TILE, 5);
-        }
-        if (isWall(x - 1, y)) f.fillStyle(0x000000, 0.16).fillRect(px, py, 4, TILE);
-        if (isWall(x + 1, y)) f.fillStyle(0x000000, 0.16).fillRect(px + TILE - 4, py, 4, TILE);
-      }
-    }
-
-    // Paredes, linha por linha
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        if (isWall(x, y)) wall(this.rows[y], x, y, !isWall(x, y + 1));
-      }
-    }
-
-    // Porta da frente (na parede de baixo) e barricadas na frente dela
-    const [dx, dy] = FRONT_DOOR;
-    const door = this.rows[dy];
-    door.fillStyle(0x6b4423).fillRect(dx * TILE + 3, dy * TILE + TILE - WALL_H - 10, TILE - 6, WALL_H + 10);
-    door.fillStyle(0xd9b45b).fillCircle(dx * TILE + TILE - 8, dy * TILE + TILE - 10, 1.5);
-    for (let i = 0; i < s.buildings.barricade; i++) {
-      box(this.rows[dy - 1], (dx - 1) * TILE + 2 + i * 3, (dy - 1) * TILE + 10 + i * 4, TILE * 3 - 4 - i * 6, 8, 6 + i * 3, 0x7a6040);
-    }
-
-    BED_SLOTS.forEach(([x, y], i) => {
-      if (i >= s.buildings.bed) return;
-      const g = this.rows[y];
-      box(g, x * TILE + 3, y * TILE - 6, TILE - 6, TILE + 2, 7, 0x8a5a3a);
-      g.fillStyle(0x7a8fb0).fillRect(x * TILE + 4, y * TILE - 6, TILE - 8, TILE - 6);
-      g.fillStyle(0xe8e0d0).fillRect(x * TILE + 6, y * TILE - 11, TILE - 12, 6);
-    });
-
-    const station = (p: P, kind: Station, built: boolean, color: number, h = 12) => {
-      const px = p[0] * TILE;
-      const py = p[1] * TILE;
-      if (built) {
-        const g = this.rows[p[1]];
-        box(g, px + 3, py + 6, TILE - 6, TILE - 10, h, color);
-        detail(g, kind, px + 3, py + 6 - h, TILE - 10, h);
-      } else {
-        // Lugar reservado: só um risco de giz no chão.
-        f.lineStyle(1, 0xa89a80, 0.3).strokeRect(px + 3.5, py + 3.5, TILE - 7, TILE - 7);
-        f.lineStyle(1, 0xa89a80, 0.15).lineBetween(px + 6, py + 6, px + TILE - 6, py + TILE - 6);
-      }
+    // Lugar reservado para o que ainda não foi construído: um risco de giz tracejado no chão.
+    const mark = (tiles: P[]) => {
+      const xs = tiles.map((t) => t[0]);
+      const ys = tiles.map((t) => t[1]);
+      const x0 = Math.min(...xs) * TILE + 3;
+      const y0 = Math.min(...ys) * TILE + 3;
+      const w = (Math.max(...xs) + 1) * TILE - 3 - x0;
+      const h = (Math.max(...ys) + 1) * TILE - 3 - y0;
+      f.fillStyle(0xd6cfc1, 0.35);
+      for (let x = x0; x < x0 + w; x += 4) f.fillRect(x, y0, 2, 1).fillRect(x, y0 + h - 1, 2, 1);
+      for (let y = y0; y < y0 + h; y += 4) f.fillRect(x0, y, 1, 2).fillRect(x0 + w - 1, y, 1, 2);
     };
-    station(STATIONS.workbench, 'workbench', s.buildings.workbench > 0, 0x8a6a3e);
-    station(STATIONS.stove, 'stove', s.buildings.stove > 0, 0x6a6a6a, 14);
-    station(STATIONS.filter, 'filter', s.buildings.filter > 0, 0x4f7394, 18);
-    station(STATIONS.latrine, 'latrine', s.buildings.latrine > 0, 0x9a978a, 10);
-    station(STATIONS.radio, 'radio', s.buildings.radio > 0, 0x6a5238, 11);
-    STATIONS.collectors.forEach((p, i) => station(p, 'collector', i < s.buildings.rainCollector, 0x3d6f8f, 16));
 
-    STATIONS.gardens.forEach((p, i) => {
-      const px = p[0] * TILE;
-      const py = p[1] * TILE;
+    for (const d of DECOR) this.furn(d);
+    BEDS.forEach((b, i) => {
+      if (i < s.buildings.bed) this.prop('bed', b.cx, b.top + BED_H, 0.75);
+    });
+    const station = (furn: Furn, built: boolean) => (built ? this.furn(furn) : mark(furn.block));
+    station(BUILT.stove, s.buildings.stove > 0);
+    station(BUILT.workbench, s.buildings.workbench > 0);
+    station(BUILT.filter, s.buildings.filter > 0);
+    station(BUILT.radio, s.buildings.radio > 0);
+    station(BUILT.latrine, s.buildings.latrine > 0);
+    COLLECTORS.forEach((c, i) => station(c, i < s.buildings.rainCollector));
+    STATIONS.gardens.forEach(([x, y], i) => {
       if (i < s.buildings.garden) {
-        const g = this.rows[p[1] + 1];
-        box(g, px + 2, py + 2, TILE * 3 - 4, TILE * 2 - 4, 4, 0x5a4026);
-        for (let k = 0; k < 6; k++) {
-          const cx = px + 14 + (k % 3) * 28;
-          const cy = py + 12 + Math.floor(k / 3) * 24;
-          g.fillStyle(s.gardenWatered ? 0x5f9e3a : 0x8a8f4a).fillTriangle(cx - 6, cy, cx, cy - 12, cx + 6, cy);
-          g.fillStyle(s.gardenWatered ? 0x7cc04f : 0x9aa055).fillCircle(cx, cy - 8, 4);
-        }
+        const bed = this.prop('garden', x * TILE + TILE * 1.5, (y + 2) * TILE, 0.55);
+        // Horta de sobrevivência: verde cansado; sem água fica amarelada.
+        bed.setTint(s.gardenWatered ? 0x9c9a7e : 0x948260);
       } else {
-        f.lineStyle(1, 0xa89a80, 0.3).strokeRect(px + 3.5, py + 3.5, TILE * 3 - 7, TILE * 2 - 7);
-        f.lineStyle(1, 0xa89a80, 0.15).lineBetween(px + 6, py + 6, px + TILE * 3 - 6, py + TILE * 2 - 6);
+        mark([[x, y], [x + 2, y + 1]]);
       }
     });
 
-    // Depósito: caixotes que crescem com o estoque.
-    const piles: [number, number][] = [
-      [s.resources.food, 0xa0623a],
-      [s.resources.water, 0x3d85c6],
-      [s.resources.wood + s.resources.scrap, 0x8a7a5a],
-    ];
-    piles.forEach(([amount, color], i) => {
-      const n = Math.min(6, Math.ceil(amount / 3));
-      for (let k = 0; k < n; k++) {
-        const bx = (8 + i * 3) * TILE + (k % 3) * 10 + 2;
-        const by = 17 * TILE + 10 - Math.floor(k / 3) * 7;
-        box(this.rows[17], bx, by, 9, 8, 7 + Math.floor(k / 3) * 6, color);
-      }
-    });
+    // Barricada na frente da porta: cada nível põe mais tábuas.
+    const [dx, dy] = FRONT_DOOR;
+    for (let i = 0; i < s.buildings.barricade; i++) {
+      this.prop('barricade', dx * TILE + TILE / 2 + (i === 0 ? 0 : i % 2 ? 5 : -5), dy * TILE - 2 - i * 5, 0.3, 6 + i * 0.1);
+    }
+
+    // Depósito: comida em sacos, água em barris e material em caixotes, crescendo com o estoque.
+    const pile = (amount: number) => (amount < 1 ? 0 : Math.min(3, Math.ceil(amount / 5)));
+    for (let k = 0; k < pile(s.resources.food); k++) this.prop('sacks', 214 + k * 30, 452 + (k % 2) * 3, 0.5);
+    for (let k = 0; k < pile(s.resources.water); k++) this.prop('barrel', 404 + k * 30, 462, 0.3);
+    for (let k = 0; k < pile(s.resources.wood + s.resources.scrap); k++) this.prop('crates', 216 + k * 34, 514, 0.4).setFlipX(k === 1);
 
     if (s.resources.waste > 6) {
+      // Sujeira acumulada perto da latrina: manchas de pixel, sem borda lisa.
       const n = Math.min(10, Math.floor(s.resources.waste / 2));
       for (let k = 0; k < n; k++) {
-        f.fillStyle(0x3d3a26, 0.85).fillEllipse((2 + ((k * 7) % 4)) * TILE + 10, (15 + (k % 3)) * TILE + 14, 12 + (k % 3) * 3, 7);
+        const x = (2 + ((k * 7) % 4)) * TILE + 6;
+        const y = (15 + (k % 3)) * TILE + 12;
+        f.fillStyle(0x2f2a1c, 0.75).fillRect(x, y, 10 + (k % 3) * 3, 4).fillRect(x + 2, y - 1, 6, 6);
       }
     }
   }
@@ -490,9 +384,11 @@ export class ShelterScene extends Phaser.Scene {
     home.forEach((v) => {
       let spot: P;
       let pose: Pose = 'stand';
+      let rest: { x: number; y: number } | null = null;
       if (night && v.task !== 'guard') {
         const inBed = bedIndex < s.buildings.bed;
         spot = inBed ? BED_SLOTS[bedIndex] : SPOTS.floorSleep[(bedIndex - s.buildings.bed) % SPOTS.floorSleep.length];
+        if (inBed) rest = { x: BEDS[bedIndex].cx, y: BEDS[bedIndex].top + SLEEP_DY };
         pose = inBed ? 'bed' : 'floor';
         bedIndex++;
       } else {
@@ -507,6 +403,8 @@ export class ShelterScene extends Phaser.Scene {
       const moved = sp.leaving || !sp.target || sp.target[0] !== spot[0] || sp.target[1] !== spot[1];
       sp.leaving = false;
       sp.pose = pose;
+      sp.restAt = rest;
+      if (!this.populated && rest && !sp.path.length) sp.body.setPosition(rest.x, rest.y);
       if (moved) this.goTo(sp, spot);
       else if (!sp.path.length && !this.tweens.isTweening(sp.body)) sp.actor.setPose(pose);
     });
@@ -524,7 +422,7 @@ export class ShelterScene extends Phaser.Scene {
     body.add([name, icon]);
     body.setPosition(start.x, start.y);
     if (!at) actor.face('up');
-    const sp: Sprite = { actor, body, icon, target: at, path: [], pose: 'stand', leaving: false };
+    const sp: Sprite = { actor, body, icon, target: at, path: [], pose: 'stand', restAt: null, leaving: false };
     this.sprites.set(v.id, sp);
     return sp;
   }
@@ -564,7 +462,7 @@ export class ShelterScene extends Phaser.Scene {
       sp.actor.setPose(sp.pose);
       return;
     }
-    const to = feet(next[0], next[1]);
+    const to = !sp.path.length && sp.restAt && !sp.leaving ? sp.restAt : feet(next[0], next[1]);
     const dist = Math.hypot(to.x - sp.body.x, to.y - sp.body.y);
     sp.actor.setPose('stand');
     sp.actor.faceDelta(to.x - sp.body.x, to.y - sp.body.y);
@@ -609,76 +507,23 @@ export class ShelterScene extends Phaser.Scene {
   }
 }
 
-/** Tiles com móveis construídos (camas, bancadas, hortas, caixotes). */
-const PROPS = ['prop-bed', 'prop-workbench', 'prop-stove', 'prop-filter', 'prop-latrine', 'prop-radio', 'prop-collector', 'prop-garden', 'prop-barricade', 'prop-crates'];
-/** A pintura é 4:3: cobre a cena (574 de altura) e mais uma sobra embaixo. */
-const BG_H = 588;
-/** Escurece um pouco a pintura, que veio clara demais para o tom do jogo. */
-const BG_TINT = 0x9f998f;
-
-type Station = 'workbench' | 'stove' | 'filter' | 'latrine' | 'radio' | 'collector';
-
-/**
- * O que identifica cada móvel, desenhado sobre o bloco no mesmo traço do resto da casa.
- * (x, y) é o canto do topo do bloco, `d` a profundidade do topo e `h` a altura da frente.
- */
-function detail(g: Phaser.GameObjects.Graphics, kind: Station, x: number, y: number, d: number, h: number): void {
-  const cx = x + 11;
-  const cy = y + d / 2;
-  switch (kind) {
-    case 'workbench':
-      g.fillStyle(0x3b3b3b).fillRect(x + 2, y + 3, 6, 4); // morsa
-      g.fillStyle(0xbdbdbd).fillRect(x + 10, y + 3, 9, 2); // serrote
-      g.fillStyle(0x6b4423).fillRect(x + 10, y + 5, 3, 2);
-      g.fillStyle(0xb0392b).fillRect(x + 12, y + 10, 7, 5); // caixa de ferramentas
-      g.fillStyle(0x7d2a20).fillRect(x + 12, y + 14, 7, 1);
-      break;
-    case 'stove':
-      g.fillStyle(0x1f1f1f).fillCircle(cx, cy, 6); // boca
-      g.fillStyle(0xe0762a).fillCircle(cx, cy, 3);
-      g.fillStyle(0xf2c14e).fillRect(cx - 1, cy - 1, 2, 2);
-      g.fillStyle(0x1f1f1f).fillRect(x + 6, y + d + 3, 10, h - 6); // porta do fogo
-      g.fillStyle(0xe0762a).fillRect(x + 8, y + d + 5, 6, h - 10);
-      g.fillStyle(0x4a4a4a).fillRect(x + 17, y - 8, 3, 10); // chaminé
-      break;
-    case 'filter':
-      g.fillStyle(0xb9b3a3).fillCircle(cx, cy, 7); // pano e areia
-      g.fillStyle(0x2b2b2b).fillCircle(cx, cy, 4); // carvão
-      g.fillStyle(0x9a9a9a).fillRect(x + 15, y + d + h - 7, 4, 2); // torneira
-      g.fillStyle(0x7fb2d6).fillRect(x + 16, y + d + h - 5, 2, 4);
-      break;
-    case 'latrine':
-      g.fillStyle(0x2a2620).fillEllipse(cx, cy, 11, 7);
-      g.fillStyle(0xe8e0d0).fillRect(x + 17, y + 2, 3, 4); // papel
-      break;
-    case 'radio':
-      g.fillStyle(0x2b2b30).fillRect(x + 3, y + 3, 16, 10);
-      g.fillStyle(0x45454d).fillRect(x + 3, y + 3, 16, 2);
-      g.fillStyle(0x6fd06a).fillRect(x + 5, y + 7, 2, 2); // luz
-      g.fillStyle(0xd9b45b).fillRect(x + 9, y + 7, 8, 2); // mostrador
-      g.fillStyle(0x8a8a8a).fillCircle(x + 7, y + 11, 1.5);
-      g.lineStyle(1, 0xcfcfcf, 0.9).lineBetween(x + 18, y + 3, x + 21, y - 10); // antena
-      break;
-    case 'collector':
-      g.fillStyle(0x8c8f7a).fillRect(x + 1, y + 1, 20, d - 2); // lona
-      g.fillStyle(0x70735f).fillTriangle(x + 1, y + 1, x + 21, y + 1, cx, cy);
-      g.fillStyle(0x2f5f80).fillCircle(cx, cy, 3); // água
-      break;
-  }
-}
-
+/** Tiles ocupados por móveis (camas, construções, hortas e os móveis fixos). */
 function furniture(s: ShelterState): Set<number> {
   const out = new Set<number>();
-  const add = (x: number, y: number) => out.add(y * W + x);
-  BED_SLOTS.slice(0, s.buildings.bed).forEach(([x, y]) => add(x, y));
-  if (s.buildings.workbench) add(...STATIONS.workbench);
-  if (s.buildings.stove) add(...STATIONS.stove);
-  if (s.buildings.filter) add(...STATIONS.filter);
-  if (s.buildings.latrine) add(...STATIONS.latrine);
-  if (s.buildings.radio) add(...STATIONS.radio);
-  STATIONS.collectors.slice(0, s.buildings.rainCollector).forEach(([x, y]) => add(x, y));
+  const add = ([x, y]: P) => out.add(y * W + x);
+  BEDS.slice(0, s.buildings.bed).forEach(({ slot: [x, y] }) => {
+    add([x, y]);
+    add([x, y - 1]);
+  });
+  DECOR.forEach((d) => d.block.forEach(add));
+  if (s.buildings.workbench) BUILT.workbench.block.forEach(add);
+  if (s.buildings.stove) BUILT.stove.block.forEach(add);
+  if (s.buildings.filter) BUILT.filter.block.forEach(add);
+  if (s.buildings.latrine) BUILT.latrine.block.forEach(add);
+  if (s.buildings.radio) BUILT.radio.block.forEach(add);
+  COLLECTORS.slice(0, s.buildings.rainCollector).forEach((c) => c.block.forEach(add));
   STATIONS.gardens.slice(0, s.buildings.garden).forEach(([x, y]) => {
-    for (let j = 0; j < 2; j++) for (let i = 0; i < 3; i++) add(x + i, y + j);
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 3; i++) add([x + i, y + j]);
   });
   return out;
 }

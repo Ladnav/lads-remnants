@@ -244,4 +244,43 @@ export async function snapExact(src, dest, { pixel, colors = 28, key = true, sca
   return { width: w, height: h, pixel: p };
 }
 
+/**
+ * Acha cada objeto de uma folha de fundo chapado (magenta): componentes conectados, com folga de
+ * 6 px para juntar pedaços do mesmo objeto. Devolve as caixas em ordem de leitura.
+ */
+export async function findObjects(src, minArea = 1500) {
+  const { data, info } = await sharp(src).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const W = info.width;
+  const H = info.height;
+  const solid = new Uint8Array(W * H);
+  const bg = [data[0], data[1], data[2]];
+  for (let i = 0, p = 0; p < W * H; i += 3, p++) {
+    solid[p] = Math.hypot(data[i] - bg[0], data[i + 1] - bg[1], data[i + 2] - bg[2]) > 110 ? 1 : 0;
+  }
+  const STEPS = [-6, -3, -1, 0, 1, 3, 6];
+  const seen = new Uint8Array(W * H);
+  const boxes = [];
+  for (let p = 0; p < W * H; p++) {
+    if (!solid[p] || seen[p]) continue;
+    let x0 = W, y0 = H, x1 = 0, y1 = 0, n = 0;
+    const stack = [p];
+    seen[p] = 1;
+    while (stack.length) {
+      const q = stack.pop();
+      const x = q % W, y = (q - x) / W;
+      n++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      for (const dy of STEPS) for (const dx of STEPS) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const nq = ny * W + nx;
+        if (solid[nq] && !seen[nq]) { seen[nq] = 1; stack.push(nq); }
+      }
+    }
+    if (n > minArea) boxes.push({ x0, y0, x1, y1 });
+  }
+  boxes.sort((a, b) => (Math.abs(a.y0 - b.y0) > 120 ? a.y0 - b.y0 : a.x0 - b.x0));
+  return { boxes, W, H };
+}
+
 if (cmd === 'grid') console.log(await detectGrid(rest[0]));

@@ -69,7 +69,7 @@ export class NightLight {
     private pixel?: PixelLightOptions,
   ) {
     // Camada própria no modo pixel: filtro de pixel (a pintada usa filtro suave).
-    const key = pixel ? 'pixel-light' : 'shelter-light';
+    const key = pixel ? `pixel-light-${w}x${h}` : 'shelter-light';
     this.tex = scene.textures.exists(key) ? (scene.textures.get(key) as Phaser.Textures.CanvasTexture) : scene.textures.createCanvas(key, w, h)!;
     this.image = scene.add.image(0, -WALL_H, key).setOrigin(0).setDepth(100000);
   }
@@ -202,24 +202,28 @@ export class NightLight {
         let warm = false;
         for (let i = 0; i < sources.length; i++) {
           const s = sources[i];
-          if (ty >= 0 && !this.seen[i]?.[ty * cols + tx]) continue;
+          // Acima da primeira linha (topo da parede de fora) nenhuma luz chega.
+          if (ty < 0 || !this.seen[i]?.[ty * cols + tx]) continue;
           const k = 1 - Math.hypot(x - s.x, (wy - s.y) * 1.2) / s.r;
           if (k > lit) {
             lit = k;
             warm = !!s.fire;
           }
         }
+        // O topo das paredes recebe só metade da luz: senão vira uma faixa clara pontilhada no escuro.
+        if (ty >= 0 && this.pixel!.opaque(tx, ty)) lit *= 0.5;
         const level = Math.max(0, Math.min(1, lit * 1.25)) * 4;
         const step = Math.min(4, Math.floor(level) + (level % 1 > BAYER[((y >> 1) & 3) * 4 + ((x >> 1) & 3)] ? 1 : 0));
         let r = 4;
         let g = 7;
         let b = 15;
-        let a = base * (1 - step / 4);
-        if (warm && step >= 1 && step < 4) {
+        // Nem perto da chama fica claro como de dia: sobra um pouco da noite.
+        let a = base * (1 - (step / 4) * 0.72);
+        if (warm && step >= 1) {
           r = 255;
           g = 150;
           b = 60;
-          a = Math.max(a * 0.6, 0.06);
+          a = Math.max(a * 0.72, 0.1);
         }
         const A = Math.round(255 * a);
         for (let yy = y; yy < Math.min(y + 2, this.h); yy++) {

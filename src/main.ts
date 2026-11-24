@@ -188,6 +188,15 @@ async function boot(): Promise<void> {
     });
     return;
   }
+  // Só no `npm run dev` e offline: `?demo` mostra a casa com tudo construído (para capturas de tela).
+  const qs = new URLSearchParams(location.search);
+  if (import.meta.env.DEV && !backend.online && qs.has('demo')) {
+    shelter.buildings = { workbench: 1, rainCollector: 2, filter: 1, stove: 1, garden: 2, bed: 6, latrine: 1, barricade: 2, radio: 1 };
+    Object.assign(shelter.resources, { food: 14, water: 15, wood: 10 });
+    shelter.gardenWatered = true;
+    if (qs.has('noite')) shelter.hour = Math.floor(shelter.hour / 24) * 24 + 22;
+    shelter.lastSeenHour = shelter.hour;
+  }
   overlay.classList.add('hidden');
   const seenBefore = shelter.lastSeenHour;
   const resBefore = shelter.seenResources;

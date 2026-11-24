@@ -1,7 +1,7 @@
 // Prova de estilo em pixel art: recorta as folhas geradas, encaixa na grade e na paleta
 // e grava em public/pixel/ para a cena de teste (?pixel).
 import sharp from 'sharp';
-import { snapExact } from './pixel.mjs';
+import { findObjects, snapExact } from './pixel.mjs';
 
 // Tamanho do "pixel falso" medido em cada folha (zoom na imagem): é o que preserva o detalhe.
 const MARTA_PX = 3.2;
@@ -33,41 +33,7 @@ async function marta() {
 /** Móveis: acha cada objeto separado pelo fundo magenta e encaixa na largura pedida (em pixels). */
 async function props() {
   const src = 'art/raw/pixel-props2.jpg';
-  const { data, info } = await sharp(src).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-  const W = info.width;
-  const H = info.height;
-  const solid = new Uint8Array(W * H);
-  // O fundo é a cor do canto; só conta como objeto o que se afasta bem dela.
-  const bg = [data[0], data[1], data[2]];
-  for (let i = 0, p = 0; p < W * H; i += 3, p++) {
-    const d = Math.hypot(data[i] - bg[0], data[i + 1] - bg[1], data[i + 2] - bg[2]);
-    solid[p] = d > 110 ? 1 : 0;
-  }
-  // Componentes conectados (com folga de 6 px para juntar pedaços do mesmo objeto).
-  const STEPS = [-6, -3, -1, 0, 1, 3, 6];
-  const seen = new Uint8Array(W * H);
-  const boxes = [];
-  for (let p = 0; p < W * H; p++) {
-    if (!solid[p] || seen[p]) continue;
-    let x0 = W, y0 = H, x1 = 0, y1 = 0, n = 0;
-    const stack = [p];
-    seen[p] = 1;
-    while (stack.length) {
-      const q = stack.pop();
-      const x = q % W, y = (q - x) / W;
-      n++;
-      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-      for (const dy of STEPS) for (const dx of STEPS) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-        const nq = ny * W + nx;
-        if (solid[nq] && !seen[nq]) { seen[nq] = 1; stack.push(nq); }
-      }
-    }
-    if (n > 1500) boxes.push({ x0, y0, x1, y1 });
-  }
-  // Ordem de leitura: linhas de cima para baixo, e da esquerda para a direita.
-  boxes.sort((a, b) => (Math.abs(a.y0 - b.y0) > 120 ? a.y0 - b.y0 : a.x0 - b.x0));
+  const { boxes, W, H } = await findObjects(src);
   const names = ['bed', 'stove', 'workbench', 'barrel', 'garden', 'crates', 'sacks', 'table', 'chair', 'shelf', 'bucket', 'barricade'];
   console.log(boxes.length, 'objetos');
   for (let i = 0; i < Math.min(boxes.length, names.length); i++) {
