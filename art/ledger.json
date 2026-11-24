@@ -707,6 +707,51 @@
       "textTokens": 740,
       "imageTokens": 1120,
       "usd": 0.1441
+    },
+    {
+      "at": "2026-11-24T06:58:13.231Z",
+      "job": "pixel-faces-a",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 1392,
+      "textTokens": 891,
+      "imageTokens": 1120,
+      "usd": 0.1479
+    },
+    {
+      "at": "2026-11-24T06:58:48.749Z",
+      "job": "pixel-faces-b",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 1403,
+      "textTokens": 1146,
+      "imageTokens": 1120,
+      "usd": 0.151
+    },
+    {
+      "at": "2026-11-24T06:59:08.832Z",
+      "job": "pixel-scenes-a",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 331,
+      "textTokens": 685,
+      "imageTokens": 1120,
+      "usd": 0.1433
+    },
+    {
+      "at": "2026-11-24T06:59:26.076Z",
+      "job": "pixel-scenes-b",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 309,
+      "textTokens": 571,
+      "imageTokens": 1120,
+      "usd": 0.1419
+    },
+    {
+      "at": "2026-11-24T06:59:42.684Z",
+      "job": "pixel-scenes-c",
+      "model": "gemini-3-pro-image",
+      "inputTokens": 293,
+      "textTokens": 590,
+      "imageTokens": 1120,
+      "usd": 0.1421
     }
   ]
 }

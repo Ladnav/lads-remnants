@@ -13,6 +13,7 @@
     "deploy:edge": "npm run build:edge && supabase functions deploy game --no-verify-jwt",
     "smoke:online": "vite-node scripts/smoke-online.ts",
     "art": "node scripts/art.mjs",
+    "pixel:ui": "node scripts/pixel-ui.mjs",
     "icons": "node scripts/icons.mjs",
     "preview": "vite preview --port 4173",
     "deploy:pages": "node scripts/deploy-pages.mjs",

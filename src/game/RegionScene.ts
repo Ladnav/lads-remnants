@@ -187,7 +187,7 @@ export class RegionScene extends Phaser.Scene {
 
   private label(x: number, y: number, text: string, color: string): Phaser.GameObjects.Text {
     const t = this.add
-      .text(Math.round(x), Math.round(y), text, { fontFamily: '"Special Elite", monospace', fontSize: '11px', color, stroke: '#0b0a08', strokeThickness: 4 })
+      .text(Math.round(x), Math.round(y), text, { fontFamily: '"Pixelify Sans", monospace', fontSize: '11px', color, stroke: '#0b0a08', strokeThickness: 4 })
       .setOrigin(0.5, 0)
       .setDepth(28);
     this.labels.push(t);

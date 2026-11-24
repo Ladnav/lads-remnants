@@ -751,7 +751,7 @@ input[type='email'] {
   --warn: #dba24a;
   --bad: #d4553c;
   --accent: #e0a04a;
-  --title: 'Special Elite', 'Courier New', monospace;
+  --title: 'Pixelify Sans', 'Courier New', monospace;
   font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
 }
 
@@ -759,7 +759,8 @@ input[type='email'] {
 body {
   background:
     linear-gradient(rgba(10, 11, 11, 0.9), rgba(10, 11, 11, 0.97)),
-    url('/art/title.webp') center / cover fixed #0a0b0b;
+    url('/pixel/ui/scene-title.png') center / cover fixed #0a0b0b;
+  image-rendering: pixelated;
 }
 
 .card h3,
@@ -1200,4 +1201,102 @@ button.linkish {
   font-size: 11px;
   color: var(--muted);
   text-decoration: underline;
+}
+
+/* ---------- Pixel art: molduras de 2 px, cantos retos, botões com relevo em degrau ---------- */
+.card,
+.modal,
+#topbar,
+.chip,
+.res,
+.bar,
+.banner.hero,
+#game canvas,
+select,
+input {
+  border-radius: 0 !important;
+}
+
+.card,
+.modal {
+  border: 2px solid #3a362e;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 240, 210, 0.05),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.35),
+    4px 4px 0 rgba(0, 0, 0, 0.35);
+}
+
+button {
+  border-radius: 0;
+  border: 2px solid #4a4336;
+  box-shadow:
+    inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+    inset 2px 2px 0 rgba(255, 240, 210, 0.08);
+  font-family: var(--title);
+  transition: none;
+}
+
+button:active:not(:disabled) {
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.45);
+  transform: translateY(1px);
+}
+
+button.primary {
+  background: #d89a46;
+  border-color: #6c4f34;
+  box-shadow:
+    inset -2px -2px 0 #9a6328,
+    inset 2px 2px 0 #f0c27a;
+  text-shadow: none;
+}
+
+.tab {
+  font-family: var(--title);
+}
+
+/* Cenas e retratos em pixel: ampliados sem borrar, com uma borda escura em vez do degradê. */
+.banner {
+  image-rendering: pixelated;
+  -webkit-mask-image: none;
+  mask-image: none;
+  border-bottom: 2px solid #111113;
+}
+
+.face,
+.face img,
+img.face {
+  image-rendering: pixelated;
+  border-radius: 0;
+}
+
+/* Retrato do cartão no tamanho real (64 px) e o da ficha ampliado em número inteiro. */
+.who-open .face {
+  width: 64px;
+  height: 64px;
+  border: 2px solid #3a362e;
+}
+
+.profile-face {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+}
+
+.profile-face img {
+  width: 320px;
+  height: 320px;
+  min-height: 0;
+  object-fit: contain;
+  image-rendering: pixelated;
+  -webkit-mask-image: none;
+  mask-image: none;
+  border: 2px solid #3a362e;
+}
+
+@media (max-width: 900px) {
+  .profile-face img {
+    width: 192px;
+    height: 192px;
+  }
 }
