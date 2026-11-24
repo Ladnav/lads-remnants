@@ -39,13 +39,15 @@ export const TAP_SLOP = 10 * (window.devicePixelRatio || 1);
  * Enquadra uma cena w×h com ampliação inteira. Se couber, fica centrada; se não couber (celular, ou
  * tela de densidade alta), começa em `focus` e anda com o dedo. Refaz sozinha quando o canvas muda.
  */
-export function setupObliqueCamera(scene: Phaser.Scene, w = 0, h = 0, focus?: { x: number; y: number }): void {
+export function setupObliqueCamera(scene: Phaser.Scene, w = 0, h = 0, focus?: { x: number; y: number }, minZoom = 1): void {
   sharpText(scene);
   const cam = scene.cameras.main;
+  // Degraus de ampliação a mais (rodinha do mouse), sempre inteiros para não borrar.
+  let extra = 0;
   const fit = (): void => {
     const W = w || scene.scale.width;
     const H = h || scene.scale.height - WALL_H;
-    const z = cameraZoom(scene, W, H, narrow() ? NARROW_ZOOM : 1);
+    const z = extra + Math.max(minZoom, cameraZoom(scene, W, H, narrow() ? NARROW_ZOOM : 1));
     cam.setOrigin(0.5, 0.5).setZoom(z);
     const fits = W * z <= scene.scale.width + 1 && (H + WALL_H) * z <= scene.scale.height + 1;
     if (fits) cam.removeBounds().centerOn(W / 2, (H - WALL_H) / 2);
@@ -54,6 +56,14 @@ export function setupObliqueCamera(scene: Phaser.Scene, w = 0, h = 0, focus?: { 
   };
   fit();
   scene.scale.on('resize', fit);
+  scene.input.on('wheel', (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
+    const before = extra;
+    extra = Phaser.Math.Clamp(extra + (dy < 0 ? 1 : -1), Math.min(0, 1 - minZoom), 2);
+    if (extra === before) return;
+    const mid = { x: cam.midPoint.x, y: cam.midPoint.y };
+    fit();
+    if ((scene as Phaser.Scene & { panning?: boolean }).panning) cam.centerOn(mid.x, mid.y);
+  });
   scene.events.once('shutdown', () => scene.scale.off('resize', fit));
   // Arrastar move a câmera quando a cena não cabe inteira.
   scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {

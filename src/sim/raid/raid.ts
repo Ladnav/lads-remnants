@@ -54,7 +54,7 @@ export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {
   const startHp = opts.startHp ?? def.maxHp;
   const state: RaidState = {
     seed,
-    site: opts.site ?? 'Mercado Bom Preço',
+    site: opts.site ?? 'Supermercado Sartori',
     emergency: !!opts.emergency,
     rocks: START_ROCKS,
     specials: opts.specials ?? 0,
@@ -441,7 +441,7 @@ function endTurn(state: RaidState, ev: RaidEvent[], noises: Noise[]): void {
 
   const roof = state.exits.find((e) => e.id === 'roof');
   if (roof && state.turn === roof.opensAt) {
-    ev.push({ text: `A escada do telhado está livre — até o turno ${roof.closesAt}.`, tone: 'good' });
+    ev.push({ text: `A escada do telhado está livre até o turno ${roof.closesAt}.`, tone: 'good' });
   }
   if (roof && roof.closesAt !== null && state.turn === roof.closesAt + 1) {
     ev.push({ text: 'Zumbis tomaram o telhado. Só resta a entrada.', tone: 'bad' });

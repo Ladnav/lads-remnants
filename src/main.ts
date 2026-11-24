@@ -1,6 +1,6 @@
 import '@fontsource/special-elite/latin-400.css';
 import Phaser from 'phaser';
-import { RESOURCES, type ResourceId } from './data/shelter';
+import { LOCATIONS, RESOURCES, type ResourceId } from './data/shelter';
 import { banner, faceLargeUrl, faceUrl } from './game/art';
 import { GalleryScene } from './game/GalleryScene';
 import { iconUrl, iconize } from './game/icons';
@@ -194,6 +194,7 @@ async function boot(): Promise<void> {
     shelter.buildings = { workbench: 1, rainCollector: 2, filter: 1, stove: 1, garden: 2, bed: 6, latrine: 1, barricade: 2, radio: 1 };
     Object.assign(shelter.resources, { food: 14, water: 15, wood: 10 });
     shelter.gardenWatered = true;
+    if (qs.has('tudo')) shelter.discovered = LOCATIONS.map((l) => l.id);
     if (qs.has('noite')) shelter.hour = Math.floor(shelter.hour / 24) * 24 + 22;
     shelter.lastSeenHour = shelter.hour;
   }
@@ -256,7 +257,7 @@ function render(): void {
   if (mode === 'raid' || !shelter) return;
   markSeen(shelter);
   if (mode === 'shelter') {
-    hint.textContent = 'Defina tarefas, construa e cuide do grupo. A comunidade segue viva com a aba fechada.';
+    hint.textContent = 'Defina tarefas, construa e cuide do grupo. O abrigo continua rodando com a aba fechada.';
     if (shelterScene.ready) shelterScene.draw(shelter);
   } else {
     hint.textContent = 'Clique num local para planejar uma expedição noturna ou entrar numa incursão ativa.';
@@ -376,7 +377,7 @@ function showReport(since: number, resBefore: ShelterState['seenResources'], ali
       ${lost.length ? `<p class="bad">Perdidos: ${lost.map((v) => `<strong>${v.name}</strong> (${v.status === 'dead' ? 'morto(a)' : 'partiu'})`).join(', ')}.</p>` : ''}
       ${joined.length ? `<p class="good">Chegaram: ${joined.map((v) => `<strong>${v.name}</strong>`).join(', ')}.</p>` : ''}
       ${deltas ? `<div class="resgrid" style="margin-bottom:10px">${deltas}</div>` : ''}
-      <div class="log report">${entries.length ? diaryHtml(entries.slice(-40)) : '<div class="muted">Nada de importante. Só o silêncio e os gemidos ao longe.</div>'}</div>
+      <div class="log report">${entries.length ? diaryHtml(entries.slice(-40)) : '<div class="muted">Nada de mais. Só uns gemidos lá longe, de madrugada.</div>'}</div>
       <div class="actions" style="margin-top:12px"><button class="primary" id="report-ok">Voltar ao abrigo</button></div>`);
   document.getElementById('report-ok')!.addEventListener('click', () => {
     overlay.classList.add('hidden');

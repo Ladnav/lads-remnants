@@ -441,7 +441,7 @@ export class ShelterUi {
         id: 'door',
         title: 'Atenda quem bater na porta',
         done: s.visits > 0 && !atDoor,
-        hint: atDoor ? 'Tem alguém na porta agora: decida no cartão laranja acima. Não existe escolha sem custo.' : 'Logo alguém vai aparecer. Cada visita é uma escolha, e o grupo lembra dela.',
+        hint: atDoor ? 'Tem alguém na porta agora: decida no cartão laranja acima.' : 'Logo alguém bate na porta. Ajudar ou não mexe com o humor do grupo.',
       },
       {
         id: 'talk',
@@ -537,7 +537,7 @@ export class ShelterUi {
           ${item(s.resources.water >= need.water, `💧 ${fmt(s.resources.water)}/${need.water}`)}
           ${item(allHome, allHome ? '🏠 todos em casa' : '🏠 falta gente')}
         </div>
-        <div class="small muted">Combustível aparece na Oficina do Seu Zé. Partir encerra a história: vai quem estiver vivo.</div>
+        <div class="small muted">Combustível aparece na Auto Mecânica do Tião. Partir encerra a história: vai quem estiver vivo.</div>
         <div class="actions" style="margin-top:6px"><button class="primary" data-cmd='${JSON.stringify({ cmd: 'evacuate' })}' ${ready ? '' : 'disabled'}>🚗 Partir para o cais</button></div>`;
     }
     return `<div class="card"><h3>Objetivo · sair da cidade</h3>

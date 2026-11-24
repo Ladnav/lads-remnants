@@ -96,7 +96,7 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
     ended: null,
     visits: 0,
   };
-  log(s, 'Dia 1. Uma casa de dois andares com muro alto. Três pessoas, pouca água, nenhum plano.');
+  log(s, 'Dia 1. Achamos uma casa de muro alto na Rua das Palmeiras. A água dá para uns dois dias.');
   log(s, 'Comece pela bancada: sem ela, quase nada se constrói.');
   return s;
 }
@@ -441,7 +441,7 @@ export function evacuate(s: ShelterState): string | null {
   s.dilemmas = [];
   s.standing = null;
   s.ended = { hour: s.hour, saved: alive.map((v) => v.name) };
-  log(s, `${alive.map((v) => v.name).join(', ')} ${alive.length > 1 ? 'trancaram' : 'trancou'} a porta pela última vez e ${alive.length > 1 ? 'seguiram' : 'seguiu'} para o cais. O barco esperava.`, 'good');
+  log(s, `${alive.map((v) => v.name).join(', ')} ${alive.length > 1 ? 'trancaram' : 'trancou'} a porta pela última vez e ${alive.length > 1 ? 'seguiram' : 'seguiu'} para o cais. O barco ainda estava lá.`, 'good');
   return null;
 }
 

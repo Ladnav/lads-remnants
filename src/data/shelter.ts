@@ -73,7 +73,7 @@ export const RECIPES: Record<RecipeId, RecipeDef> = {
   garden: { name: 'Horta', icon: '🌱', description: 'Produz comida com trabalho. Bebe 1 água por dia.', cost: { wood: 3, scrap: 1 }, hours: 4, needsWorkbench: true, max: 2 },
   latrine: { name: 'Latrina', icon: '🚽', description: 'Metade dos resíduos gerados.', cost: { wood: 2, scrap: 1 }, hours: 2, needsWorkbench: true, max: 1 },
   barricade: { name: 'Barricada', icon: '🧱', description: 'Menos ataques noturnos e defesa melhor.', cost: { wood: 4, scrap: 2 }, hours: 3, needsWorkbench: true, max: 3 },
-  radio: { name: 'Rádio', icon: '📻', description: 'Capta transmissões à noite. O primeiro passo para sair da cidade.', cost: { parts: 4, scrap: 4 }, hours: 8, needsWorkbench: true, max: 1 },
+  radio: { name: 'Rádio', icon: '📻', description: 'Capta transmissões à noite. Se alguém lá fora estiver chamando, é por aqui que vocês vão saber.', cost: { parts: 4, scrap: 4 }, hours: 8, needsWorkbench: true, max: 1 },
   weapon: { name: 'Arma improvisada', icon: '🔪', description: 'Uma lança ou faca para quem fica de guarda.', cost: { scrap: 2, wood: 1 }, hours: 2, needsWorkbench: true, max: 99 },
 };
 
@@ -115,11 +115,11 @@ export interface LocationDef {
 export const SHELTER_POS: [number, number] = [5, 15];
 
 export const LOCATIONS: readonly LocationDef[] = [
-  { id: 'market', name: 'Mercado Bom Preço', icon: '🛒', description: 'Comida e água, se sobrou alguma.', danger: 1, loot: ['canned_food', 'canned_food', 'canned_food', 'water', 'water', 'wood', 'scrap', 'bandage'], pos: [10, 11], zombies: [3, 5], known: true, prize: { name: 'Cofre do gerente', loot: ['canned_food', 'canned_food', 'medicine', 'ammo', 'components', 'water'] } },
-  { id: 'garage', name: 'Oficina do Seu Zé', icon: '🔧', description: 'Sucata, peças, combustível.', danger: 2, loot: ['scrap', 'scrap', 'parts', 'parts', 'fuel', 'wood', 'crowbar'], pos: [7, 5], zombies: [4, 6], known: true, prize: { name: 'Armário do Seu Zé', loot: ['parts', 'parts', 'fuel', 'components', 'components', 'crowbar'] } },
-  { id: 'pharmacy', name: 'Farmácia da Esquina', icon: '💊', description: 'Remédios e bandagens. Muita gente pensou nisso.', danger: 2, loot: ['medicine', 'bandage', 'bandage', 'water', 'components'], pos: [18, 8], zombies: [4, 6], known: false, prize: { name: 'Armário de controlados', loot: ['medicine', 'medicine', 'medicine', 'bandage', 'components'] } },
-  { id: 'hospital', name: 'Hospital Municipal', icon: '🏥', description: 'Tudo o que se precisa, e tudo o que se teme.', danger: 3, loot: ['medicine', 'medicine', 'components', 'bandage', 'parts', 'water'], pos: [21, 5], zombies: [6, 8], known: false, prize: { name: 'Farmácia interna', loot: ['medicine', 'medicine', 'medicine', 'components', 'components', 'bandage'] } },
-  { id: 'police', name: 'Delegacia', icon: '🚓', description: 'Munição e armas. Os mortos ainda estão de farda.', danger: 3, loot: ['ammo', 'ammo', 'crowbar', 'components', 'canned_food'], pos: [22, 14], zombies: [6, 8], known: false, prize: { name: 'Arsenal', loot: ['ammo', 'ammo', 'ammo', 'crowbar', 'components', 'medicine'] } },
+  { id: 'market', name: 'Supermercado Sartori', icon: '🛒', description: 'Comida e água. Já foi saqueado, mas sempre sobra alguma coisa nos fundos.', danger: 1, loot: ['canned_food', 'canned_food', 'canned_food', 'water', 'water', 'wood', 'scrap', 'bandage'], pos: [10, 11], zombies: [3, 5], known: true, prize: { name: 'Cofre do gerente', loot: ['canned_food', 'canned_food', 'medicine', 'ammo', 'components', 'water'] } },
+  { id: 'garage', name: 'Auto Mecânica do Tião', icon: '🔧', description: 'Sucata, peças e um pouco de gasolina nos galões.', danger: 2, loot: ['scrap', 'scrap', 'parts', 'parts', 'fuel', 'wood', 'crowbar'], pos: [7, 5], zombies: [4, 6], known: true, prize: { name: 'Armário do Tião', loot: ['parts', 'parts', 'fuel', 'components', 'components', 'crowbar'] } },
+  { id: 'pharmacy', name: 'Drogaria São Bento', icon: '💊', description: 'Remédio e curativo. Muita gente teve a mesma ideia.', danger: 2, loot: ['medicine', 'bandage', 'bandage', 'water', 'components'], pos: [18, 8], zombies: [4, 6], known: false, prize: { name: 'Armário de controlados', loot: ['medicine', 'medicine', 'medicine', 'bandage', 'components'] } },
+  { id: 'hospital', name: 'Santa Casa', icon: '🏥', description: 'Remédio e material de sobra, e o prédio cheio de infectados.', danger: 3, loot: ['medicine', 'medicine', 'components', 'bandage', 'parts', 'water'], pos: [21, 5], zombies: [6, 8], known: false, prize: { name: 'Farmácia interna', loot: ['medicine', 'medicine', 'medicine', 'components', 'components', 'bandage'] } },
+  { id: 'police', name: '23º DP', icon: '🚓', description: 'Munição e armas. Os policiais que ficaram de plantão ainda estão lá dentro.', danger: 3, loot: ['ammo', 'ammo', 'crowbar', 'components', 'canned_food'], pos: [22, 14], zombies: [6, 8], known: false, prize: { name: 'Arsenal', loot: ['ammo', 'ammo', 'ammo', 'crowbar', 'components', 'medicine'] } },
 ];
 
 export function locationById(id: string): LocationDef {

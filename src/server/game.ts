@@ -125,7 +125,7 @@ export function tickShelter(saved: ShelterState, nowMs: number): { state: Shelte
   } else if (door) {
     notice = { title: 'Batem na porta', body: `${door.title}. Vai embora em ${Math.max(1, door.expiresHour - s.hour)}h de jogo.`, tag: 'porta' };
   } else if (aliveSurvivors(s).length < before.alive) {
-    notice = { title: 'Uma perda no abrigo', body: lastBad?.text ?? 'Alguém não está mais entre vocês.', tag: 'perda' };
+    notice = { title: 'Uma perda no abrigo', body: lastBad?.text ?? 'Alguém do grupo morreu.', tag: 'perda' };
   } else if (before.trips.some((id) => !s.expeditions.some((e) => e.id === id))) {
     const back = [...news].reverse().find((e) => /volt/i.test(e.text));
     notice = { title: 'A expedição voltou', body: back?.text ?? 'O grupo está de volta ao abrigo.', tag: 'expedicao' };

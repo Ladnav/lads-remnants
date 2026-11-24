@@ -8,7 +8,7 @@ const MOMENTS = [
   'riram de uma piada ruim até doer',
   'passaram a tarde lembrando de como era a cidade',
   'acharam um baralho incompleto e jogaram assim mesmo',
-  'cantaram baixinho uma música que os dois sabiam',
+  'consertaram juntos a bicicleta velha do quintal',
 ];
 
 /**

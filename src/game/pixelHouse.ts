@@ -74,10 +74,10 @@ export const phash = (x: number, y: number, s = 0): number => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 
-type Rect = (x: number, y: number, w: number, h: number, c: string) => void;
-type Px = (x: number, y: number, c: string) => void;
+export type Rect = (x: number, y: number, w: number, h: number, c: string) => void;
+export type Px = (x: number, y: number, c: string) => void;
 
-function painter(ctx: CanvasRenderingContext2D): { rect: Rect; px: Px } {
+export function painter(ctx: CanvasRenderingContext2D): { rect: Rect; px: Px } {
   // Tudo desenhado com WALL_H de folga em cima: (x, y) do mundo vira (x, y + WALL_H) na textura.
   const rect: Rect = (x, y, w, h, c) => {
     ctx.fillStyle = c;
@@ -344,7 +344,7 @@ function concrete({ rect, px }: { rect: Rect; px: Px }, X: number, Y: number, tx
 }
 
 /** Ruído suave (interpolado entre pontos de uma grade de `cell` px): dá manchas orgânicas, não blocos. */
-function vnoise(x: number, y: number, cell: number, seed: number): number {
+export function vnoise(x: number, y: number, cell: number, seed: number): number {
   const gx = Math.floor(x / cell);
   const gy = Math.floor(y / cell);
   const fx = x / cell - gx;

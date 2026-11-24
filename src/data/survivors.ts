@@ -24,25 +24,25 @@ export interface SurvivorDef {
 
 /** Refugiados que podem bater na porta. */
 export const RECRUITS: readonly Omit<SurvivorDef, 'maxHp'>[] = [
-  { id: 'bruno', name: 'Bruno', bio: 'Motorista de ônibus. Conta piadas ruins para não chorar.', traits: ['forte'] },
-  { id: 'ana', name: 'Ana', bio: 'Professora. Guarda um caderno com o nome de todos que perdeu.', traits: ['silencioso', 'medroso'] },
+  { id: 'bruno', name: 'Bruno', bio: 'Motorista da linha 412. Sabe chegar em qualquer bairro sem olhar placa.', traits: ['forte'] },
+  { id: 'ana', name: 'Ana', bio: 'Dava aula de matemática no estadual. Ainda corrige quem fala errado.', traits: ['silencioso', 'medroso'] },
   { id: 'caio', name: 'Caio', bio: 'Quinze anos. Diz que tem dezoito.', traits: ['silencioso'] },
   { id: 'dona_rita', name: 'Dona Rita', bio: 'Costureira aposentada. Não aceita desperdício de nada.', traits: ['mecanico'] },
-  { id: 'teo', name: 'Téo', bio: 'Lutava jiu-jítsu. Hoje luta contra o sono.', traits: ['lutador', 'medroso'] },
+  { id: 'teo', name: 'Téo', bio: 'Dava aula de jiu-jítsu numa academia de garagem. Acorda com qualquer barulho.', traits: ['lutador', 'medroso'] },
 ];
 
 export const SURVIVORS: readonly SurvivorDef[] = [
   {
     id: 'marta',
     name: 'Marta',
-    bio: 'Era eletricista. Fala pouco, conserta tudo e não dorme desde que perdeu o irmão.',
+    bio: 'Era eletricista da prefeitura. Perdeu o irmão na primeira semana e quase não dorme.',
     traits: ['mecanico', 'medroso'],
     maxHp: 3,
   },
   {
     id: 'iuri',
     name: 'Iuri',
-    bio: 'Ex-segurança de shopping. Grande, teimoso e leal ao grupo.',
+    bio: 'Ex-segurança de shopping. Teimoso, mas é o primeiro a ir quando alguém precisa.',
     traits: ['forte', 'lutador'],
     maxHp: 3,
   },

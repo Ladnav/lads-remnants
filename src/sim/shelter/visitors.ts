@@ -113,7 +113,7 @@ export function resolveDilemma(s: ShelterState, dilemmaId: number, optionId: str
         log(s, 'Vocês dividiram o pouco que tinham. A criança acenou ao ir embora.', 'good');
       } else {
         changeMood(s, -5);
-        log(s, 'A mulher foi embora sem dizer nada. Ninguém conseguiu olhar para a porta por um tempo.', 'warn');
+        log(s, 'A mulher foi embora sem dizer nada. O resto do dia ninguém tocou no assunto.', 'warn');
       }
       break;
     case 'refugee': {
@@ -167,7 +167,7 @@ export function resolveDilemma(s: ShelterState, dilemmaId: number, optionId: str
       if (optionId === 'pay') {
         addResources(s, { food: 2, water: 2 }, -1);
         changeMood(s, -3);
-        log(s, 'Vocês pagaram. Eles riram e foram embora. Por enquanto.', 'warn');
+        log(s, 'Vocês pagaram. Eles foram embora rindo.', 'warn');
       } else {
         s.banditThreat += 3;
         log(s, 'Os homens foram embora prometendo voltar à noite. Melhor ter alguém vigiando.', 'bad');
