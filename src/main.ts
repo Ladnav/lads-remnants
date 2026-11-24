@@ -208,6 +208,13 @@ async function boot(): Promise<void> {
   // `?tab=map` (ou bench, log) abre direto numa aba: serve para links e capturas de tela.
   const tab = new URLSearchParams(location.search).get('tab');
   if (tab === 'map' || tab === 'bench' || tab === 'log') shelterUi.show(tab);
+  // Só no dev e offline: `?incursao=market` entra direto numa incursão (para capturas de tela).
+  const raidAt = new URLSearchParams(location.search).get('incursao');
+  if (import.meta.env.DEV && !backend.online && raidAt) {
+    shelter.discovered = LOCATIONS.map((l) => l.id);
+    void playRaid({ survivorId: 'marta', locationId: raidAt } as RaidRequest);
+    return;
+  }
   if (shelter.hour > seenBefore) showReport(seenBefore, resBefore, aliveBefore);
   else if (isFinished(shelter)) showGameOver();
 }

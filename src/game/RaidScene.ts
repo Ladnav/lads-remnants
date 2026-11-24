@@ -3,25 +3,34 @@ import { idx, isOpaque } from '../sim/raid/grid';
 import { computeVisible, exitStatus } from '../sim/raid/raid';
 import type { RaidState, Tile, Vec } from '../sim/raid/types';
 import { NightLight, type LightSource } from './night';
-import { TILE, WALL_H, box, cameraZoom, feet, rowDepth, shade, sharpText, smoothPainted, wall } from './oblique';
+import { LOCATIONS } from '../data/shelter';
+import { TILE, WALL_H, cameraZoom, feet, rowDepth, sharpText, smoothPainted } from './oblique';
+import { PAL, footShadow, paintHouse, type FloorKind } from './pixelHouse';
 import { Actor, preloadBodies, survivorLook, zombieLook } from './sprites';
 
 export { TILE } from './oblique';
 
-const CONTAINER_COLOR: Record<string, number> = {
-  Prateleira: 0x7a6a4a,
-  Balcão: 0x8a5a3a,
-  'Caixa de ferramentas': 0x9a3a2a,
-  Armário: 0x5a6a7a,
+/** Sprite de pixel de cada móvel (public/pixel/raid); armário e cofre são desenhados por código. */
+const CONTAINER_SPRITE: Record<string, string> = {
+  Prateleira: 'raid-shelf',
+  Balcão: 'raid-table',
+  'Caixa de ferramentas': 'raid-crates',
 };
 
-/** Número estável por tile, para variar o chão sem sortear a cada desenho. */
-const spot = (x: number, y: number): number => (((x * 73856093) ^ (y * 19349663)) >>> 0) % 1000;
+/** Piso de cada local: azulejo no comércio e no hospital, cimento na oficina e na delegacia. */
+const FLOOR_BY_PLACE: Record<string, FloorKind> = { market: 'tile', garage: 'concrete', pharmacy: 'tile', hospital: 'tile', police: 'concrete' };
 
 /** Desenha o estado da incursão em 3/4. Não guarda regras: só lê o estado e repassa cliques. */
 export class RaidScene extends Phaser.Scene {
-  private floor!: Phaser.GameObjects.Graphics;
+  /** Portas e saídas, por linha (mudam a cada turno). */
   private rows: Phaser.GameObjects.Graphics[] = [];
+  /** Névoa: o que nunca foi visto some; o que está fora de vista escurece. */
+  private fog: Phaser.GameObjects.Graphics[] = [];
+  /** Pontos de "ainda não vasculhado" e "tem coisa" em cima dos móveis. */
+  private marks!: Phaser.GameObjects.Graphics;
+  private props = new Map<number, Phaser.GameObjects.Image>();
+  /** Semente da incursão cuja casa já foi pintada. */
+  private built: number | null = null;
   private player: Actor | null = null;
   private playerId = 'marta';
   private zombies = new Map<number, Actor>();
@@ -38,6 +47,7 @@ export class RaidScene extends Phaser.Scene {
 
   preload(): void {
     preloadBodies(this);
+    for (const k of ['shelf', 'table', 'crates']) if (!this.textures.exists(`raid-${k}`)) this.load.image(`raid-${k}`, `pixel/raid/${k}.png`);
   }
 
   create(): void {
@@ -46,8 +56,11 @@ export class RaidScene extends Phaser.Scene {
     this.player = null;
     this.zombies.clear();
     this.alerts.clear();
-    this.floor = this.add.graphics().setDepth(0);
     this.rows = [];
+    this.fog = [];
+    this.props.clear();
+    this.built = null;
+    this.marks = this.add.graphics().setDepth(1);
     this.dark = null;
     this.time.addEvent({ delay: 170, loop: true, callback: () => this.dark?.flicker() });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -65,125 +78,102 @@ export class RaidScene extends Phaser.Scene {
     this.onTileClick = fn;
   }
 
-  draw(s: RaidState): void {
-    while (this.rows.length < s.height) this.rows.push(this.add.graphics().setDepth(rowDepth(this.rows.length, 5)));
-    const f = this.floor;
-    f.clear();
-    for (const g of this.rows) g.clear();
-    const vis = computeVisible(s);
-    f.fillStyle(0x0a0908).fillRect(0, -WALL_H, s.width * TILE, s.height * TILE + WALL_H);
+  /**
+   * Parte fixa, pintada uma vez por incursão: chão e paredes em pixel (pixelHouse.ts), as paredes em
+   * faixas por linha para os bonecos passarem atrás, e um sprite por móvel com a sombra dele.
+   */
+  private build(s: RaidState): void {
+    this.built = s.seed;
+    const place = LOCATIONS.find((l) => l.name === s.site)?.id ?? 'market';
+    const floor = FLOOR_BY_PLACE[place] ?? 'tile';
+    const entry = s.exits.find((e) => e.id === 'entry');
+    const wallAt = (x: number, y: number) => {
+      const t = s.tiles[idx(s, x, y)];
+      return t.kind === 'wall' || (t.kind === 'exit' && t.exitId === 'window');
+    };
+    paintHouse(this, 'raid-house', {
+      cols: s.width,
+      rows: s.height,
+      isWall: wallAt,
+      // O piso do local, com cimento nas passagens das portas.
+      floorOf: (x, y) => (s.tiles[idx(s, x, y)].kind === 'door' ? 'concrete' : floor),
+      door: entry ? [entry.pos.x, entry.pos.y] : undefined,
+    });
+    this.add.image(0, -WALL_H, 'raid-house-floor').setOrigin(0).setDepth(0);
+    const solid = (x: number, y: number) => x >= 0 && x < s.width && y >= 0 && y < s.height && (wallAt(x, y) || (entry?.pos.x === x && entry.pos.y === y));
+    for (let y = 0; y < s.height; y++) {
+      for (let x = 0; x < s.width; x++) {
+        if (!solid(x, y)) continue;
+        const front = !(y + 1 < s.height && wallAt(x, y + 1));
+        let end = x;
+        while (solid(end + 1, y) && !(y + 1 < s.height && wallAt(end + 1, y + 1)) === front) end++;
+        this.add.image(0, -WALL_H, 'raid-house-walls').setOrigin(0).setCrop(x * TILE, y * TILE, (end - x + 1) * TILE, TILE + (front ? WALL_H : 0)).setDepth(rowDepth(y, 5));
+        x = end;
+      }
+    }
+    for (const c of s.containers) {
+      const key = c.locked ? null : CONTAINER_SPRITE[c.name];
+      if (!key) continue;
+      const cx = c.pos.x * TILE + TILE / 2;
+      const bottom = c.pos.y * TILE + TILE - 3;
+      const img = this.add.image(cx, bottom, key).setOrigin(0.5, 1).setDepth(rowDepth(c.pos.y, 6));
+      this.add.image(Math.round(cx - img.width / 2) - 1, bottom - img.height, footShadow(this, key, 0.4)).setOrigin(0).setDepth(1);
+      this.props.set(c.id, img);
+    }
+  }
 
-    const at = (x: number, y: number): Tile | undefined =>
-      x >= 0 && y >= 0 && x < s.width && y < s.height ? s.tiles[idx(s, x, y)] : undefined;
-    const tall = (t: Tile | undefined) =>
-      !!t && (t.kind === 'wall' || (t.kind === 'door' && (t.door === 'closed' || t.door === 'locked')));
+  draw(s: RaidState): void {
+    if (this.built !== s.seed) this.build(s);
+    while (this.rows.length < s.height) {
+      this.rows.push(this.add.graphics().setDepth(rowDepth(this.rows.length, 5.5)));
+      this.fog.push(this.add.graphics().setDepth(rowDepth(this.fog.length, 6.5)));
+    }
+    for (const g of this.rows) g.clear();
+    for (const g of this.fog) g.clear();
+    const m = this.marks.clear().setDepth(rowDepth(0, 6.2));
+    const vis = computeVisible(s);
+    // Só no dev: `&revelar` mostra o prédio inteiro (para capturas de tela).
+    if (import.meta.env.DEV && new URLSearchParams(location.search).has('revelar')) {
+      s.seen.fill(true);
+      vis.fill(true);
+    }
+    const rect = (g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: string | number, a = 1) =>
+      g.fillStyle(typeof c === 'string' ? Phaser.Display.Color.HexStringToColor(c).color : c, a).fillRect(x, y, w, h);
+    const tall = (t: Tile | undefined) => !!t && (t.kind === 'wall' || (t.kind === 'door' && (t.door === 'closed' || t.door === 'locked')));
 
     for (let y = 0; y < s.height; y++) {
       const g = this.rows[y];
+      const fog = this.fog[y];
       for (let x = 0; x < s.width; x++) {
         const i = idx(s, x, y);
         const px = x * TILE;
         const py = y * TILE;
         const t = s.tiles[i];
+        const raised = tall(t) || t.containerId !== undefined || (t.kind === 'exit' && t.exitId !== 'entry');
         if (!s.seen[i]) {
-          g.fillStyle(0x0a0908).fillRect(px, py, TILE, TILE);
+          rect(fog, px, py - (raised ? WALL_H + 20 : 0), TILE, TILE + (raised ? WALL_H + 20 : 0), PAL.ink);
           continue;
         }
-
-        if (t.kind !== 'wall') {
-          // Piso de cerâmica velha: peças de tons diferentes, trincas, sujeira e o que ficou para trás.
-          const h = spot(x, y);
-          f.fillStyle([0x3a372f, 0x36332b, 0x3d3a31, 0x33302a][h % 4]).fillRect(px, py, TILE, TILE);
-          f.lineStyle(1, 0x2a2822, 0.8).strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
-          f.lineBetween(px + TILE / 2, py, px + TILE / 2, py + TILE).lineBetween(px, py + TILE / 2, px + TILE, py + TILE / 2);
-          if (h % 6 === 0) f.fillStyle(0x2a2721, 0.8).fillEllipse(px + 6 + (h % 15), py + 9 + (h % 12), 12 + (h % 7), 6);
-          if (h % 8 === 0) f.lineStyle(1, 0x211f1a, 0.9).lineBetween(px + (h % 11), py + 3, px + 9 + (h % 13), py + 15).lineBetween(px + 9 + (h % 13), py + 15, px + 6 + (h % 16), py + TILE - 3);
-          if (h % 13 === 0) f.fillStyle(0x4a463c).fillRect(px + 4 + (h % 17), py + 6 + (h % 15), 4, 2).fillRect(px + 9 + (h % 11), py + 14 + (h % 9), 2, 3);
-          if (h % 31 === 0) f.fillStyle(0x4a1c16, 0.75).fillEllipse(px + 14, py + 15, 17, 9).fillCircle(px + 5 + (h % 9), py + 7, 2);
-          // Sombra onde o chão encontra parede ou porta fechada.
-          if (tall(at(x, y - 1))) {
-            f.fillStyle(0x000000, 0.32).fillRect(px, py, TILE, 4);
-            f.fillStyle(0x000000, 0.17).fillRect(px, py + 4, TILE, 5);
-            f.fillStyle(0x000000, 0.07).fillRect(px, py + 9, TILE, 5);
-          }
-          if (tall(at(x - 1, y))) f.fillStyle(0x000000, 0.17).fillRect(px, py, 4, TILE);
-          if (tall(at(x + 1, y))) f.fillStyle(0x000000, 0.17).fillRect(px + TILE - 4, py, 4, TILE);
-        }
-
-        if (t.kind === 'wall') {
-          wall(g, x, y, !tall(at(x, y + 1)));
-        } else if (t.kind === 'door') {
-          const closed = t.door === 'closed' || t.door === 'locked';
-          if (closed) {
-            const wood = t.door === 'locked' ? 0x6e2f1c : 0x7a4a24;
-            g.fillStyle(shade(wood, 0.7)).fillRect(px, py - WALL_H, TILE, TILE);
-            g.fillStyle(wood).fillRect(px + 2, py + TILE - WALL_H - 8, TILE - 4, WALL_H + 8);
-            g.lineStyle(1, shade(wood, 0.6)).lineBetween(px + TILE / 2, py + TILE - WALL_H - 8, px + TILE / 2, py + TILE);
-            if (t.door === 'locked') g.fillStyle(0xd9b45b).fillRect(px + TILE / 2 - 2, py + TILE - 12, 4, 4);
-          } else {
-            // Batentes nas laterais: dá para ver que é uma passagem.
-            box(g, px, py + TILE - 6, 4, 6, WALL_H + 6, 0x5a4a3a);
-            box(g, px + TILE - 4, py + TILE - 6, 4, 6, WALL_H + 6, 0x5a4a3a);
-            if (t.door === 'broken') {
-              f.lineStyle(2, 0x7a4a24).lineBetween(px + 5, py + 8, px + 13, py + 20).lineBetween(px + 16, py + 6, px + 23, py + 18);
-            }
-          }
-        } else if (t.kind === 'exit') {
-          const open = exitStatus(s, t.exitId ?? '') === 'open';
-          const c = open ? 0xd9b45b : 0x6a6355;
-          if (t.exitId === 'window') {
-            // Janela quebrada na parede de cima: buraco claro com cacos.
-            wall(g, x, y, true);
-            g.fillStyle(open ? 0x8a9aa0 : 0x3a3a3a).fillRect(px + 6, py - WALL_H + 6, TILE - 12, WALL_H - 4);
-            g.fillStyle(0x1a1a1a).fillTriangle(px + 6, py - WALL_H + 6, px + 13, py - WALL_H + 6, px + 6, py - WALL_H + 14);
-            g.fillStyle(0x1a1a1a).fillTriangle(px + TILE - 6, py + 2, px + TILE - 14, py + 2, px + TILE - 6, py - 8);
-            g.lineStyle(2, 0x4a3a2a).strokeRect(px + 6, py - WALL_H + 6, TILE - 12, WALL_H - 4);
-          } else if (t.exitId === 'roof') {
-            // Escada encostada: dois trilhos e degraus subindo.
-            box(g, px + 6, py + 18, 3, 4, 34, c);
-            box(g, px + TILE - 9, py + 18, 3, 4, 34, c);
-            for (let k = 0; k < 4; k++) g.fillStyle(c).fillRect(px + 7, py + 14 - k * 8, TILE - 14, 2);
-          } else {
-            f.fillStyle(open ? 0x5a4a20 : 0x2a2620).fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-            f.fillStyle(c).fillTriangle(px + TILE / 2, py + 22, px + 8, py + 10, px + TILE - 8, py + 10);
-          }
-        }
-
+        if (t.kind === 'door') this.door(g, px, py, t.door ?? 'closed', rect);
+        else if (t.kind === 'exit') this.exit(g, s, px, py, t.exitId ?? '', rect);
         if (t.containerId !== undefined) {
           const c = s.containers[t.containerId];
           const empty = c.searched && c.items.length === 0;
-          const color = empty ? 0x3a3128 : c.locked ? 0x4a5058 : (CONTAINER_COLOR[c.name] ?? 0x6b4f2a);
-          const h = c.name === 'Prateleira' || c.name === 'Armário' || c.locked || c.id === s.containers.length - 1 ? 18 : 11;
-          g.fillStyle(0x000000, 0.3).fillRect(px + 5, py + TILE - 4, TILE - 6, 3);
-          box(g, px + 3, py + 6, TILE - 6, TILE - 10, h, color);
-          // O que distingue cada móvel, na frente dele.
-          const front = py + TILE - 4 - h;
-          const line = shade(color, 0.5);
-          if (c.name === 'Prateleira') {
-            g.lineStyle(1, line).lineBetween(px + 4, front + 6, px + TILE - 4, front + 6).lineBetween(px + 4, front + 12, px + TILE - 4, front + 12);
-          } else if (c.name === 'Armário') {
-            g.lineStyle(1, line).lineBetween(px + TILE / 2, front + 2, px + TILE / 2, front + h - 2);
-            g.fillStyle(0xcfc6b0).fillRect(px + TILE / 2 - 3, front + 8, 2, 2).fillRect(px + TILE / 2 + 2, front + 8, 2, 2);
-          } else if (c.name === 'Caixa de ferramentas') {
-            g.fillStyle(0xcfc6b0).fillRect(px + TILE / 2 - 3, front + 3, 6, 2);
-          } else {
-            g.lineStyle(1, line).lineBetween(px + 4, front + 4, px + TILE - 4, front + 4);
+          const img = this.props.get(c.id);
+          if (img) img.setTint(empty ? 0x6a655c : 0xffffff);
+          else if (c.locked) this.vault(g, px, py, rect);
+          else this.locker(g, px, py, empty, rect);
+          // Ponto amarelo: ainda não vasculhado. Branco: tem coisa para levar.
+          const dotY = py - 6;
+          if (!c.searched && !c.locked) {
+            rect(m, px + 12, dotY, 4, 4, PAL.ink);
+            rect(m, px + 13, dotY + 1, 2, 2, '#e8c65e');
+          } else if (c.searched && c.items.length) {
+            rect(m, px + 12, dotY, 4, 4, PAL.ink);
+            rect(m, px + 13, dotY + 1, 2, 2, '#f1ebe0');
           }
-          const topY = py + 6 - h + (TILE - 10) / 2;
-          if (c.locked) {
-            // Cofre: chapa de aço com fechadura dourada e brilho para chamar o olho.
-            g.fillStyle(0x2a2e33).fillRect(px + 7, front + 2, TILE - 14, h - 4);
-            g.fillStyle(0xe8c65e).fillCircle(px + TILE / 2, front + h / 2, 2.5);
-            g.lineStyle(1, 0xe8c65e, 0.9).strokeCircle(px + TILE / 2, topY, 4);
-            g.fillStyle(0xe8c65e).fillCircle(px + TILE / 2, topY, 2);
-          } else if (!c.searched) g.fillStyle(0xd9b45b).fillCircle(px + TILE / 2, topY, 3);
-          else if (c.items.length) g.fillStyle(0xf1ebe0).fillCircle(px + TILE / 2, topY, 3);
         }
-
-        if (!vis[i]) {
-          const raised = tall(t) || t.containerId !== undefined || (t.kind === 'exit' && t.exitId === 'roof');
-          g.fillStyle(0x000000, 0.4).fillRect(px, py - (raised ? WALL_H + 20 : 0), TILE, TILE + (raised ? WALL_H + 20 : 0));
-        }
+        if (!vis[i]) rect(fog, px, py - (raised ? WALL_H + 20 : 0), TILE, TILE + (raised ? WALL_H + 20 : 0), 0x000000, 0.42);
       }
     }
 
@@ -206,13 +196,106 @@ export class RaidScene extends Phaser.Scene {
     this.dark.set(0.6, lights, [], doors);
   }
 
+  /** Porta em pixel: fechada é uma folha de tábuas na altura da parede; aberta deixa só os batentes. */
+  private door(g: Phaser.GameObjects.Graphics, px: number, py: number, state: string, rect: (g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: string | number, a?: number) => void): void {
+    const top = py - WALL_H;
+    if (state === 'closed' || state === 'locked') {
+      rect(g, px, top, TILE, TILE + WALL_H, PAL.ink);
+      rect(g, px + 1, top + 1, TILE - 2, TILE - 2, PAL.wood1);
+      rect(g, px + 1, top + 1, TILE - 2, 1, PAL.wood3);
+      const face = py + TILE - WALL_H - 6;
+      rect(g, px + 2, face, TILE - 4, WALL_H + 6, state === 'locked' ? '#5e3322' : PAL.wood2);
+      for (let k = 0; k < 4; k++) rect(g, px + 2 + k * 6, face, 1, WALL_H + 6, PAL.wood0);
+      rect(g, px + 2, face + 4, TILE - 4, 1, PAL.wood0);
+      rect(g, px + 2, face + WALL_H, TILE - 4, 1, PAL.wood0);
+      if (state === 'locked') {
+        // Cadeado.
+        rect(g, px + 12, face + 6, 5, 4, '#c9a54a');
+        rect(g, px + 13, face + 4, 3, 2, '#8a8477');
+        rect(g, px + 14, face + 7, 1, 2, PAL.ink);
+      } else rect(g, px + TILE - 8, face + 9, 2, 2, '#c9a54a');
+      return;
+    }
+    // Batentes dos dois lados.
+    for (const bx of [px, px + TILE - 3]) {
+      rect(g, bx, top, 3, TILE + WALL_H, PAL.wood0);
+      rect(g, bx, top, 1, TILE + WALL_H, PAL.wood2);
+    }
+    if (state === 'broken') {
+      // Lascas da porta no chão.
+      rect(g, px + 5, py + 16, 9, 3, PAL.wood2);
+      rect(g, px + 15, py + 20, 7, 2, PAL.wood1);
+      rect(g, px + 8, py + 22, 3, 2, PAL.wood3);
+    }
+  }
+
+  /** Escada do telhado e janela quebrada; a entrada já vem pintada como porta na parede de baixo. */
+  private exit(g: Phaser.GameObjects.Graphics, s: RaidState, px: number, py: number, id: string, rect: (g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: string | number, a?: number) => void): void {
+    const open = exitStatus(s, id) === 'open';
+    if (id === 'roof') {
+      const rail = open ? '#9a948a' : '#5e5b55';
+      rect(g, px + 7, py + 23, 16, 3, 0x111113, 0.4);
+      for (const rx of [px + 6, px + TILE - 9]) {
+        rect(g, rx, py - 22, 3, 46, PAL.ink);
+        rect(g, rx + 1, py - 21, 1, 44, rail);
+      }
+      for (let k = 0; k < 7; k++) rect(g, px + 7, py + 18 - k * 6, TILE - 14, 2, rail);
+      if (!open) for (let k = 0; k < 3; k++) rect(g, px + 4 + k * 8, py + 4 + k * 5, 6, 2, PAL.rust);
+      return;
+    }
+    if (id === 'window') {
+      // Vidro quebrado na face da parede de cima, com cacos.
+      const fy = py + TILE - WALL_H;
+      rect(g, px + 5, fy + 1, TILE - 10, WALL_H - 4, PAL.ink);
+      rect(g, px + 6, fy + 2, TILE - 12, WALL_H - 6, open ? '#6f8288' : '#3a3c40');
+      rect(g, px + 6, fy + 2, 4, 3, '#a9bcc0');
+      rect(g, px + TILE - 11, fy + WALL_H - 7, 5, 2, '#a9bcc0');
+      rect(g, px + 13, fy + 2, 1, WALL_H - 6, PAL.ink);
+    }
+  }
+
+  /** Armário de aço amassado, de pé. */
+  private locker(g: Phaser.GameObjects.Graphics, px: number, py: number, empty: boolean, rect: (g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: string | number, a?: number) => void): void {
+    const x = px + 5;
+    const top = py - 12;
+    const body = empty ? '#4a4c50' : '#5d6670';
+    rect(g, x + 3, py + 22, 18, 3, 0x111113, 0.45);
+    rect(g, x - 1, top - 1, 20, 37, PAL.ink);
+    rect(g, x, top, 18, 8, '#717b85');
+    rect(g, x, top + 8, 18, 27, body);
+    rect(g, x + 9, top + 8, 1, 27, PAL.ink);
+    for (let k = 0; k < 3; k++) rect(g, x + 2, top + 11 + k * 2, 5, 1, PAL.ink);
+    rect(g, x + 11, top + 18, 1, 3, '#b7b1a4');
+    rect(g, x + 7, top + 18, 1, 3, '#b7b1a4');
+    rect(g, x + 13, top + 26, 3, 2, PAL.rust);
+  }
+
+  /** O prêmio trancado: cofre de aço com a roda dourada. */
+  private vault(g: Phaser.GameObjects.Graphics, px: number, py: number, rect: (g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: string | number, a?: number) => void): void {
+    const x = px + 3;
+    const top = py - 6;
+    rect(g, x + 3, py + 22, 24, 3, 0x111113, 0.45);
+    rect(g, x - 1, top - 1, 24, 31, PAL.ink);
+    rect(g, x, top, 22, 8, '#5d6268');
+    rect(g, x, top + 8, 22, 21, '#3f4348');
+    rect(g, x + 2, top + 10, 18, 17, '#4b5056');
+    rect(g, x, top, 22, 1, '#7d838a');
+    // Roda e fechadura.
+    rect(g, x + 8, top + 15, 6, 6, '#c9a54a');
+    rect(g, x + 10, top + 17, 2, 2, PAL.ink);
+    rect(g, x + 17, top + 17, 2, 3, '#c9a54a');
+    // Um brilho em cima para chamar o olho.
+    rect(g, x + 10, top - 6, 2, 2, '#e8c65e');
+  }
+
   private drawActors(s: RaidState, vis: boolean[]): void {
     if (!this.player) {
       this.player = new Actor(this, survivorLook(this.playerId));
       const p = feet(s.player.x, s.player.y);
       this.player.container.setPosition(p.x, p.y);
       // Câmera próxima, seguindo o sobrevivente: a névoa esconde o resto mesmo. Ampliação inteira.
-      const fit = () => this.cameras.main.setZoom(cameraZoom(this, s.width * TILE, s.height * TILE, 1.7));
+      const whole = import.meta.env.DEV && new URLSearchParams(location.search).has('revelar');
+      const fit = () => this.cameras.main.setZoom(cameraZoom(this, s.width * TILE, s.height * TILE, whole ? 1 : 1.7));
       this.cameras.main
         .setBounds(0, -WALL_H, s.width * TILE, s.height * TILE + WALL_H)
         .setOrigin(0.5, 0.5)

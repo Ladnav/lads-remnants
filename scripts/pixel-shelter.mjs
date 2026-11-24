@@ -22,6 +22,10 @@ const SHEETS = [
   },
 ];
 
+/** Versões de um tile para os móveis da incursão (public/pixel/raid). */
+const RAID = { shelf: 26, table: 28, crates: 22 };
+mkdirSync('public/pixel/raid/', { recursive: true });
+
 for (const sheet of SHEETS) {
   const { boxes, W, H } = await findObjects(sheet.src);
   console.log(sheet.src, boxes.length, 'objetos');
@@ -39,5 +43,9 @@ for (const sheet of SHEETS) {
     const target = sheet.width[name];
     const r = await snapExact(tmp, OUT + name + '.png', { pixel: (b.x1 - b.x0) / target, colors: 24 });
     console.log(name, `${r.width}×${r.height}`);
+    if (RAID[name] && sheet.src.includes('props2')) {
+      const rr = await snapExact(tmp, `public/pixel/raid/${name}.png`, { pixel: (b.x1 - b.x0) / RAID[name], colors: 20 });
+      console.log('  raid', name, `${rr.width}×${rr.height}`);
+    }
   }
 }
