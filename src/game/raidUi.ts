@@ -109,6 +109,10 @@ export class RaidUi {
           { text: `${def.name} entra em ${s.site}.`, tone: 'info' },
           { text: `Ache suprimentos e volte. A escada do telhado abre no turno ${roof?.opensAt}.`, tone: 'info' },
           { text: `Tem algo trancado lá no fundo: ${s.containers.find((c) => c.locked)?.name ?? 'um cofre'}. A chave deve estar em algum móvel.`, tone: 'good' },
+          ...(s.room
+            ? [{ text: s.room.hasKey ? `Você trouxe a chave da ${s.room.name.toLowerCase()}. A porta de aço fica em algum lugar do prédio.` : `Tem uma porta de aço aqui: ${s.room.name}. Sem a chave, só com kit de gazua.`, tone: (s.room.hasKey ? 'good' : 'info') as RaidEvent['tone'] }]
+            : []),
+          ...(s.containers.some((c) => c.corpse) ? [{ text: `${s.containers.find((c) => c.corpse)!.name} ainda está aqui, com o que levava.`, tone: 'warn' as RaidEvent['tone'] }] : []),
         ];
   }
 

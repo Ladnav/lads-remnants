@@ -34,7 +34,7 @@ export function chebyshev(a: Vec, b: Vec): number {
 }
 
 export function isOpaque(t: Tile): boolean {
-  return t.kind === 'wall' || (t.kind === 'door' && (t.door === 'closed' || t.door === 'locked'));
+  return t.kind === 'wall' || (t.kind === 'door' && (t.door === 'closed' || t.door === 'locked' || t.door === 'sealed'));
 }
 
 /** Pode ser atravessado por um caminho (portas contam, pois podem ser abertas ou derrubadas). */

@@ -29,7 +29,12 @@ export type ItemId =
   | 'vest'
   | 'flashlight'
   | 'lockpick_kit'
-  | 'soft_shoes';
+  | 'soft_shoes'
+  // Chaves que ficam com você: abrem a sala especial de outro local (data/shelter.ts).
+  | 'key_manager'
+  | 'key_workshop'
+  | 'card_storage'
+  | 'key_armory';
 
 /** Raridade: decide a cor e a chance de aparecer (tabelas em sim/raid/loot.ts). */
 export type Rarity = 'comum' | 'incomum' | 'raro' | 'lendario';
@@ -82,6 +87,10 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   flashlight: { name: 'Lanterna', weight: 0.5, value: 6, icon: '🔦', rarity: 'incomum' },
   lockpick_kit: { name: 'Kit de gazua', weight: 0.5, value: 12, icon: '🪛', rarity: 'raro' },
   soft_shoes: { name: 'Tênis macio', weight: 0.5, value: 6, icon: '👟', rarity: 'incomum' },
+  key_manager: { name: 'Chave da sala do gerente', weight: 0, value: 10, icon: '🔑', rarity: 'raro' },
+  key_workshop: { name: 'Chave do depósito da oficina', weight: 0, value: 10, icon: '🔑', rarity: 'raro' },
+  card_storage: { name: 'Cartão do almoxarifado', weight: 0, value: 10, icon: '💳', rarity: 'raro' },
+  key_armory: { name: 'Chave do arsenal', weight: 0, value: 12, icon: '🔑', rarity: 'raro' },
 };
 
 export interface ContainerDef {

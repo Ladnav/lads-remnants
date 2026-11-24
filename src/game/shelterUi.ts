@@ -450,6 +450,18 @@ export class ShelterUi {
 
   /** Arsenal: o equipamento guardado, com o desgaste das armas e o conserto na bancada. */
   private arsenalHtml(s: ShelterState): string {
+    const keys = (Object.keys(s.keys) as (keyof typeof ITEMS)[])
+      .filter((k) => (s.keys[k] ?? 0) > 0)
+      .map((k) => {
+        const opens = LOCATIONS.find((l) => l.room?.key === k);
+        return `<div class="row small"><span>${gearLabel(k)} <span class="muted">· ${s.keys[k]} ${s.keys[k] === 1 ? 'uso' : 'usos'}</span></span><span class="muted">abre: ${opens ? `${opens.room!.name} (${opens.name})` : '?'}</span></div>`;
+      })
+      .join('');
+    const keyCard = keys ? `<div class="card"><h3>Chaves</h3>${keys}<div class="small muted" style="margin-top:6px">Vão junto sozinhas na incursão ao local da sala.</div></div>` : '';
+    return this.gearCard(s) + keyCard;
+  }
+
+  private gearCard(s: ShelterState): string {
     if (!s.arsenal.length) return '<div class="card"><h3>Arsenal</h3><div class="small muted">Vazio. Equipamento achado nas incursões fica guardado aqui.</div></div>';
     const order: Slot[] = ['weapon', 'pack', 'armor', 'util'];
     const rows = s.arsenal

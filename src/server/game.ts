@@ -5,7 +5,7 @@ import { GEAR, type Loadout, type Slot, type Worn } from '../data/gear';
 import type { ItemId } from '../data/items';
 import { locationById, type RecipeId, type RiskRule, type TaskId } from '../data/shelter';
 import { replay } from '../sim/raid/raid';
-import type { Action } from '../sim/raid/types';
+import type { Action, RaidState } from '../sim/raid/types';
 import { aliveSurvivors, clamp, dayOf, hourOfDay, log, syncWeapons } from '../sim/shelter/core';
 import { cancelExpedition, delegateEmergency, pendingEmergencies, sendExpedition, takeOverEmergency } from '../sim/shelter/expeditions';
 import {
@@ -62,6 +62,9 @@ export interface RaidRequest {
    */
   loadout?: { weapon?: boolean | number; pack?: number; armor?: number; util?: number; rounds?: number; bandages?: number };
 }
+
+/** Por quantas horas de jogo o corpo de quem morreu numa incursão fica no local. */
+export const CORPSE_HOURS = 72;
 
 /** Cansaço a partir do qual ninguém aceita sair para uma incursão. */
 export const RAID_MAX_FATIGUE = 85;
@@ -208,6 +211,10 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
   }
 
   const v = s.survivors.find((x) => x.id === req.survivorId)!;
+  // Corpo de quem morreu aqui nos últimos 3 dias: aparece nesta incursão e depois some (alguém levou).
+  s.corpses = s.corpses.filter((c) => s.hour - c.hour <= CORPSE_HOURS);
+  const corpse = s.corpses.find((c) => c.locationId === loc.id);
+  s.corpses = s.corpses.filter((c) => c !== corpse);
   const ticket: RaidTicket = {
     id: s.nextId++,
     survivorId: v.id,
@@ -230,10 +237,19 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
       danger: loc.danger,
       mapNote: hasUndiscovered(s) && !s.mapsFound.includes(loc.id),
       prize: loc.prize,
+      room: loc.room ? { name: loc.room.name, loot: loc.room.loot } : undefined,
+      roomKey: !!loc.room && (s.keys[loc.room.key] ?? 0) > 0,
+      corpse: corpse ? { name: corpse.name, items: corpse.items } : undefined,
     },
   };
   s.activeRaid = ticket;
   return ok(ticket);
+}
+
+/** Morreu numa incursão: o corpo fica lá com a mochila e o equipamento, por 3 dias. */
+export function leaveCorpse(s: ShelterState, locationId: string, name: string, end: RaidState): void {
+  const gearIds = (Object.values(end.gear).filter(Boolean) as Worn[]).map((w) => w.id);
+  s.corpses.push({ locationId, name, items: [...end.backpack, ...gearIds], hour: s.hour });
 }
 
 /**
@@ -292,6 +308,13 @@ export function finishRaid(s: ShelterState, raidId: number, actions: Action[], n
   s.activeRaid = null;
   const v = s.survivors.find((x) => x.id === t.survivorId);
   if (v && v.status === 'raid') v.status = 'home';
+  // A chave da sala especial gasta um uso quando abre a porta (mesmo que não volte).
+  const room = locationById(t.locationId).room;
+  if (room && end.room?.usedKey) {
+    s.keys[room.key] = Math.max(0, (s.keys[room.key] ?? 0) - 1);
+    if (!s.keys[room.key]) delete s.keys[room.key];
+  }
+  if (end.status === 'dead' && v) leaveCorpse(s, t.locationId, v.name, end);
   applyRaidResult(s, t.survivorId, outcome, t.locationId, t.opts.startItems ?? []);
   advanceTo(s, nowMs);
   return ok(outcome);

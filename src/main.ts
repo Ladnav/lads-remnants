@@ -209,6 +209,8 @@ async function boot(): Promise<void> {
     if (qs.has('tudo')) shelter.discovered = LOCATIONS.map((l) => l.id);
     shelter.arsenal.push({ id: 'revolver', wear: 22 }, { id: 'bat', wear: 4 }, { id: 'pack_hiking', wear: 0 }, { id: 'vest', wear: 0 }, { id: 'flashlight', wear: 0 });
     shelter.resources.ammo = 8;
+    shelter.keys.key_manager = 3;
+    shelter.corpses.push({ locationId: 'market', name: 'Bruno', items: ['machete', 'first_aid', 'canned_food'], hour: shelter.hour });
     shelter.resources.weapons = shelter.arsenal.filter((w) => w.id !== 'pack_hiking' && w.id !== 'vest' && w.id !== 'flashlight').length;
     if (qs.has('noite')) shelter.hour = Math.floor(shelter.hour / 24) * 24 + 22;
     shelter.lastSeenHour = shelter.hour;

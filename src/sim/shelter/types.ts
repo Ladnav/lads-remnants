@@ -1,3 +1,4 @@
+import type { ItemId } from '../../data/items';
 import type { Worn } from '../../data/gear';
 import type { BuildingId, RecipeId, ResourceId, RiskRule, TaskId } from '../../data/shelter';
 import type { SurvivorDef, TraitId } from '../../data/survivors';
@@ -93,6 +94,10 @@ export interface ShelterState {
   version: 1;
   /** Equipamento guardado (armas lembram o desgaste). */
   arsenal: Worn[];
+  /** Chaves que ficam com você e quantos usos restam. */
+  keys: Partial<Record<ItemId, number>>;
+  /** Quem morreu numa incursão deixou o corpo lá, com o que levava, por 3 dias. */
+  corpses: { locationId: string; name: string; items: ItemId[]; hour: number }[];
   seed: number;
   rng: number;
   /** Horas de jogo desde o início. 1 dia de jogo = 24h de jogo = 12h reais. */

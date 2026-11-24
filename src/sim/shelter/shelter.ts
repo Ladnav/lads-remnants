@@ -47,6 +47,8 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
   const s: ShelterState = {
     version: 1,
     arsenal: [fresh('knife')],
+    keys: {},
+    corpses: [],
     seed,
     rng: seed | 0 || 1,
     hour: START_HOUR,
@@ -108,6 +110,8 @@ export function createShelter(seed: number, nowMs: number): ShelterState {
 /** Saves antigos não têm os campos da Fase 3. */
 export function migrate(s: ShelterState): ShelterState {
   s.discovered ??= LOCATIONS.filter((l) => l.known).map((l) => l.id);
+  s.keys ??= {};
+  s.corpses ??= [];
   // Antes do arsenal, "armas" eram só um número: viram facas improvisadas.
   if (!s.arsenal) {
     s.arsenal = Array.from({ length: Math.floor(s.resources.weapons) }, () => fresh('knife'));

@@ -319,7 +319,7 @@ Cada fase termina jogável, testada e publicável.
 |---|---|---|
 | **0a** ✅ | Tipos de item, raridade, tabelas N1 a N4, brilho; migração do save (feito em 2026-11-24; sem migração: os ids de item não mudaram) | Testes de tabela (distribuição dentro do esperado em 10 mil sorteios); saves antigos abrem |
 | **0b** ✅ | Equipamento: 4 espaços, armas com desgaste, arma de fogo com mira, arsenal, tela antes da incursão (feito em 2026-11-24; rádio de pilha ficou de fora) | Uma incursão com revólver e outra só com faca mostram a diferença de barulho e risco |
-| **0c** | Chaves persistentes, salas especiais, corpo recuperável | Chave achada no Mercado abre a sala da Oficina na incursão seguinte |
+| **0c** ✅ | Chaves persistentes, salas especiais, corpo recuperável (feito em 2026-11-24; locais secretos Bunker e Banco ficaram para depois) | Chave achada no Mercado abre a sala da Oficina na incursão seguinte |
 | **1a** | Um save que sincroniza: fila de comandos, talão de sementes, conferência no servidor | Jogar 1 dia offline, reconectar, e o servidor aceitar; relógio adiantado é recusado |
 | **1b** | Esconderijo, depósito exposto, defesas, saqueador humano | Testes das regras de proteção e teto de 25% |
 | **1c** | Invasão simulada no motor da incursão, replay "Ver a invasão" | Replay mostra exatamente o que o relatório diz |

@@ -47,6 +47,10 @@ export interface SiteOptions {
   calm?: number;
   /** Perigo do local (1 a 3): empurra o saque para raridades melhores. Padrão 1. */
   danger?: 1 | 2 | 3;
+  /** Sala especial: uma sala de fundo com porta de aço e móveis de nível 3. */
+  room?: { name: string; loot: readonly ItemId[] };
+  /** Corpo de alguém do grupo que morreu aqui há pouco, com o que levava. */
+  corpse?: { name: string; items: readonly ItemId[] };
 }
 
 const DEFAULT_PRIZE = { name: 'Cofre', loot: ['medicine', 'ammo', 'components', 'parts', 'canned_food'] as readonly ItemId[] };
@@ -197,13 +201,70 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
   const nearFirst = containers.slice(0, vaultId).sort((a, b) => nearestDist(a.pos) - nearestDist(b.pos));
   pick(r, nearFirst.slice(0, 5)).items.push('vault_key');
 
+  // Sala especial: uma sala de uma porta só, sem entrada, escada nem cofre, vira a sala trancada.
+  const inside = (p: Vec, rm: Rect) => p.x >= rm.x0 && p.x <= rm.x1 && p.y >= rm.y0 && p.y <= rm.y1;
+  let sealedRoom: Rect | null = null;
+  if (opts.room) {
+    const candidates = rooms.filter((rm) => {
+      if (inside(start, rm) || inside(roof, rm) || inside(vault, rm)) return false;
+      if ((rm.x1 - rm.x0 + 1) * (rm.y1 - rm.y0 + 1) < 6) return false;
+      if (!containers.some((c) => !c.locked && inside(c.pos, rm))) return false;
+      return roomDoors(g, rm).length === 1;
+    });
+    if (!candidates.length) return null;
+    sealedRoom = pick(r, candidates);
+    const door = roomDoors(g, sealedRoom)[0];
+    tiles[idx(g, door.x, door.y)] = { kind: 'door', door: 'sealed' };
+    for (const c of containers) {
+      if (c.locked || !inside(c.pos, sealedRoom)) continue;
+      c.items = Array.from({ length: randInt(r, 2, 3) }, () => rollItem(r, 3, opts.danger ?? 1, [opts.room!.loot]));
+      c.items = c.items.filter((it) => it !== 'vault_key');
+    }
+    // A chave do cofre nunca fica presa lá dentro.
+    for (const c of containers) {
+      if (!inside(c.pos, sealedRoom)) continue;
+      const k = c.items.indexOf('vault_key');
+      if (k >= 0) {
+        c.items.splice(k, 1);
+        pick(r, containers.filter((o) => !o.locked && !inside(o.pos, sealedRoom!))).items.push('vault_key');
+      }
+    }
+  }
+  const outside = (p: Vec) => !sealedRoom || !inside(p, sealedRoom);
+
+  // Corpo de quem morreu aqui: no chão, encostado numa parede, fora da sala trancada.
+  if (opts.corpse) {
+    const spots: Vec[] = [];
+    for (let i = 0; i < tiles.length; i++) {
+      const x = i % width;
+      const y = Math.floor(i / width);
+      const t = tiles[i];
+      if (t.kind !== 'floor' || t.containerId !== undefined || dist[i] < 6 || !outside({ x, y })) continue;
+      const nb = DIRS.map((d) => tiles[idx(g, x + d.x, y + d.y)]);
+      if (!nb.some((n) => n.kind === 'wall')) continue;
+      if (nb.some((n) => n.kind === 'door' || n.kind === 'exit' || n.containerId !== undefined)) continue;
+      if (nb.filter((n) => n.kind === 'floor' && n.containerId === undefined).length < 2) continue;
+      spots.push({ x, y });
+    }
+    if (spots.length) {
+      const p = pick(r, spots);
+      const id = containers.length;
+      containers.push({ id, pos: p, name: `Corpo de ${opts.corpse.name}`, searched: false, items: [...opts.corpse.items], corpse: true });
+      tiles[idx(g, p.x, p.y)].containerId = id;
+      const check = bfsDistances(g, start, isWalkableForPath);
+      for (let i = 0; i < tiles.length; i++) {
+        const t = tiles[i];
+        if ((t.kind === 'floor' || t.kind === 'door') && t.containerId === undefined && check[i] < 0) return null;
+      }
+    }
+  }
+
   const freeFloor = (minDist: number): Vec[] => {
     const out: Vec[] = [];
     for (let i = 0; i < tiles.length; i++) {
       const t = tiles[i];
-      if (t.kind === 'floor' && t.containerId === undefined && dist[i] >= minDist) {
-        out.push({ x: i % width, y: Math.floor(i / width) });
-      }
+      const p = { x: i % width, y: Math.floor(i / width) };
+      if (t.kind === 'floor' && t.containerId === undefined && dist[i] >= minDist && outside(p)) out.push(p);
     }
     return out;
   };
@@ -232,7 +293,7 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
 
   if (opts.mapNote) {
     // Fica num dos containers mais fundos do prédio: achar o caminho custa risco.
-    const deep = [...containers].sort(
+    const deep = containers.filter((c) => outside(c.pos) && !c.corpse).sort(
       (a, b) => Math.abs(b.pos.x - start.x) + Math.abs(b.pos.y - start.y) - (Math.abs(a.pos.x - start.x) + Math.abs(a.pos.y - start.y)),
     );
     pick(r, deep.slice(0, 3)).items.push('map_note');
@@ -244,6 +305,18 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
 export function rollZombieKind(r: RngState, specials: number): ZombieKind {
   if (!chance(r, specials)) return 'walker';
   return chance(r, 0.5) ? 'runner' : 'brute';
+}
+
+/** Portas no contorno de uma sala. */
+function roomDoors(g: GridLike, rm: Rect): Vec[] {
+  const out: Vec[] = [];
+  for (let x = rm.x0; x <= rm.x1; x++) {
+    for (const y of [rm.y0 - 1, rm.y1 + 1]) if (g.tiles[idx(g, x, y)]?.kind === 'door') out.push({ x, y });
+  }
+  for (let y = rm.y0; y <= rm.y1; y++) {
+    for (const x of [rm.x0 - 1, rm.x1 + 1]) if (g.tiles[idx(g, x, y)]?.kind === 'door') out.push({ x, y });
+  }
+  return out;
 }
 
 function countIn(containers: Container[], room: Rect): number {

@@ -51,6 +51,8 @@ export interface RaidOptions extends SiteOptions {
   gear?: Loadout;
   /** Balas levadas do abrigo. */
   rounds?: number;
+  /** Você trouxe a chave da sala especial deste local. */
+  roomKey?: boolean;
 }
 
 export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {}): RaidState {
@@ -82,6 +84,7 @@ export function createRaid(seed: number, def: SurvivorDef, opts: RaidOptions = {
     // Cópia: o desgaste muda durante a incursão, e o replay precisa do equipamento como saiu.
     gear: JSON.parse(JSON.stringify(opts.gear ?? {})) as Loadout,
     rounds: opts.rounds ?? 0,
+    room: opts.room ? { name: opts.room.name, hasKey: !!opts.roomKey, usedKey: false } : undefined,
     pendingNoises: [],
     lastNoises: [],
     kills: 0,
@@ -216,7 +219,7 @@ export function adjacentLockedDoors(state: RaidState): Vec[] {
     const x = state.player.x + d.x;
     const y = state.player.y + d.y;
     const t = tileAt(state, x, y);
-    if (t?.kind === 'door' && t.door === 'locked') out.push({ x, y });
+    if (t?.kind === 'door' && (t.door === 'locked' || (t.door === 'sealed' && utilHas(state, 'picks')))) out.push({ x, y });
   }
   return out;
 }
@@ -319,6 +322,16 @@ export function applyAction(state: RaidState, action: Action): RaidEvent[] {
     }
     case 'pick': {
       const t = tileAt(state, action.x, action.y);
+      if (t?.kind === 'door' && t.door === 'sealed' && utilHas(state, 'picks') && manhattan(state.player, action) === 1) {
+        // Porta de aço com o kit de gazua: 6 turnos e barulho médio.
+        say('Você trabalha na fechadura da porta de aço. Vai demorar…');
+        for (let i = 0; i < 6 && state.status === 'active'; i++) endTurn(state, ev, [{ pos: { ...state.player }, radius: NOISE.crackQuiet + 1 }]);
+        if (state.status === 'active') {
+          t.door = 'open';
+          say('A porta de aço cede.', 'good');
+        }
+        break;
+      }
       if (t?.kind !== 'door' || t.door !== 'locked' || manhattan(state.player, action) !== 1) break;
       const turns = hasTrait(state, 'mecanico') || utilHas(state, 'picks') ? 1 : 3;
       say(turns === 1 ? 'Você abre a fechadura num instante.' : 'Você trabalha na fechadura com cuidado…');
@@ -427,6 +440,18 @@ function doMove(
 
   if (t.kind === 'door' && t.door === 'locked') {
     say('Trancada. Arrombe a fechadura (P) ou force a porta (F).', 'warn');
+    return;
+  }
+  if (t.kind === 'door' && t.door === 'sealed') {
+    const room = state.room;
+    if (room?.hasKey && !room.usedKey) {
+      room.usedKey = true;
+      t.door = 'open';
+      say(`A chave entra e a porta de aço da ${room.name.toLowerCase()} abre.`, 'good');
+      endTurn(state, ev, [{ pos: { x: nx, y: ny }, radius: NOISE.door }]);
+    } else {
+      say(`Porta de aço${room ? ` da ${room.name.toLowerCase()}` : ''}. Precisa da chave, ou de um kit de gazua e paciência (P).`, 'warn');
+    }
     return;
   }
   if (t.kind === 'door' && t.door === 'closed') {
@@ -626,6 +651,8 @@ function nextStep(state: RaidState, from: Vec, to: Vec): Vec | null {
 function tryStep(state: RaidState, z: Zombie, to: Vec, ev: RaidEvent[]): void {
   const t = tileAt(state, to.x, to.y);
   if (!t || !isWalkableForPath(t) || t.kind === 'exit') return;
+  // Porta de aço: zumbi não passa nem arromba.
+  if (t.kind === 'door' && t.door === 'sealed') return;
   if (t.kind === 'door' && (t.door === 'closed' || t.door === 'locked')) {
     t.bash = (t.bash ?? 0) + 1;
     state.pendingNoises.push({ pos: { ...to }, radius: NOISE.bash });

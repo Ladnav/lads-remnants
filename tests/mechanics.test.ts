@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SURVIVORS } from '../src/data/survivors';
 import { ZOMBIES } from '../src/data/zombies';
-import { applyCommand, finishRaid, openShelter, startRaid } from '../src/server/game';
+import { applyCommand, finishRaid, leaveCorpse, openShelter, startRaid } from '../src/server/game';
 import { applyAction, canShootAt, canThrowAt, capacity, createRaid, START_ROCKS } from '../src/sim/raid/raid';
 import type { RaidState } from '../src/sim/raid/types';
 import { REAL_MS_PER_GAME_HOUR } from '../src/sim/shelter/core';
@@ -257,5 +257,58 @@ describe('emergência com prazo', () => {
     while (s.hour < exp.emergency.deadline + 1) tickHour(s);
     expect(['home', 'dead']).toContain(iuri.status);
     expect(s.expeditions.filter((e) => e.id === exp.id)).toHaveLength(0);
+  });
+});
+
+describe('chaves que ficam e corpo recuperável', () => {
+  const room = { name: 'Sala do gerente', loot: ['canned_food', 'medicine', 'first_aid'] as const };
+
+  it('a sala especial tem uma porta de aço só, e móveis cheios lá dentro', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const r = createRaid(seed * 13, lena, { room: { ...room, loot: [...room.loot] }, roomKey: true });
+      const sealed = r.tiles.filter((t) => t.kind === 'door' && t.door === 'sealed');
+      expect(sealed).toHaveLength(1);
+      expect(r.room?.hasKey).toBe(true);
+    }
+  });
+
+  it('a chave abre a porta de aço e gasta um uso no abrigo', () => {
+    const s = openShelter(null, NOW, 21);
+    s.keys.key_manager = 3;
+    const t = ticket(s, { survivorId: 'lena', locationId: 'market' });
+    expect(t.opts.roomKey).toBe(true);
+    const r = createRaid(t.seed, t.def, t.opts);
+    const i = r.tiles.findIndex((x) => x.kind === 'door' && x.door === 'sealed');
+    const door = { x: i % r.width, y: Math.floor(i / r.width) };
+    // Põe a sobrevivente colada na porta, num piso livre.
+    const spot = [{ x: 0, y: 1 }, { x: 0, y: -1 }, { x: 1, y: 0 }, { x: -1, y: 0 }]
+      .map((d) => ({ x: door.x + d.x, y: door.y + d.y }))
+      .find((p) => r.tiles[p.y * r.width + p.x].kind === 'floor' && r.tiles[p.y * r.width + p.x].containerId === undefined)!;
+    r.player = spot;
+    r.zombies = [];
+    applyAction(r, { type: 'move', dx: door.x - spot.x, dy: door.y - spot.y });
+    expect(r.tiles[i].door).toBe('open');
+    expect(r.room?.usedKey).toBe(true);
+  });
+
+  it('quem morre deixa o corpo, que aparece na próxima incursão ao mesmo local e depois some', () => {
+    const s = openShelter(null, NOW, 22);
+    const dead = createRaid(5, lena, { gear: { weapon: { id: 'machete', wear: 10 } } });
+    dead.backpack.push('first_aid');
+    dead.status = 'dead';
+    leaveCorpse(s, 'market', 'Lena', dead);
+    expect(s.corpses[0].items).toEqual(['first_aid', 'machete']);
+    const t = ticket(s, { survivorId: 'marta', locationId: 'market' });
+    expect(t.opts.corpse?.name).toBe('Lena');
+    const r = createRaid(t.seed, t.def, t.opts);
+    expect(r.containers.some((c) => c.corpse && c.items.includes('machete'))).toBe(true);
+    expect(s.corpses).toHaveLength(0);
+  });
+
+  it('o corpo some depois de 3 dias', () => {
+    const s = openShelter(null, NOW, 23);
+    s.corpses.push({ locationId: 'market', name: 'Iuri', items: ['knife'], hour: s.hour - 80 });
+    const t = ticket(s, { survivorId: 'lena', locationId: 'market' });
+    expect(t.opts.corpse).toBeUndefined();
   });
 });

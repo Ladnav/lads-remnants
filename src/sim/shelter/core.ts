@@ -1,6 +1,6 @@
 import { GEAR, fresh, isGear } from '../../data/gear';
 import type { ItemId } from '../../data/items';
-import { ITEM_TO_RESOURCES, RESOURCES, type Cost, type ResourceId } from '../../data/shelter';
+import { ITEM_TO_RESOURCES, KEY_USES, RESOURCES, type Cost, type ResourceId } from '../../data/shelter';
 import type { EventTone } from '../raid/types';
 import type { Emotion, ShelterState, ShelterSurvivor } from './types';
 
@@ -52,6 +52,11 @@ export function syncWeapons(s: ShelterState): void {
 
 /** Guarda um item trazido de fora: equipamento vai para o arsenal, o resto vira estoque. */
 export function stashItem(s: ShelterState, it: ItemId, wear?: number): void {
+  const uses = KEY_USES[it];
+  if (uses) {
+    s.keys[it] = (s.keys[it] ?? 0) + uses;
+    return;
+  }
   if (isGear(it)) {
     s.arsenal.push(wear === undefined ? fresh(it) : { id: it, wear });
     syncWeapons(s);

@@ -9,7 +9,8 @@ export interface Vec {
 }
 
 export type TileKind = 'floor' | 'wall' | 'door' | 'exit';
-export type DoorState = 'closed' | 'locked' | 'open' | 'broken';
+/** `sealed`: porta de aço da sala especial; só a chave (ou o kit de gazua, devagar) abre. */
+export type DoorState = 'closed' | 'locked' | 'open' | 'broken' | 'sealed';
 
 export interface Tile {
   kind: TileKind;
@@ -28,6 +29,8 @@ export interface Container {
   items: ItemId[];
   /** Prêmio trancado: abre com a chave do cofre ou arrombando. */
   locked?: boolean;
+  /** Corpo de alguém do grupo que morreu aqui (com o que ele levava). */
+  corpse?: boolean;
 }
 
 export type ZombieState = 'idle' | 'investigating' | 'chasing';
@@ -95,6 +98,8 @@ export interface RaidState {
   gear: Loadout;
   /** Balas soltas para a arma de fogo. */
   rounds: number;
+  /** Sala especial do local: o nome, se você trouxe a chave e se ela foi usada. */
+  room?: { name: string; hasKey: boolean; usedKey: boolean };
   /** Turnos a mais entre as levas (local calmo). */
   calm?: number;
   /** Ruídos gerados por zumbis (portas sendo golpeadas), aplicados no turno seguinte. */

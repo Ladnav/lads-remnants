@@ -66,7 +66,15 @@ export const ITEM_TO_RESOURCES: Record<ItemId, Cost> = {
   flashlight: {},
   lockpick_kit: {},
   soft_shoes: {},
+  // Chaves ficam guardadas com os usos (sim/shelter/core.ts stashItem).
+  key_manager: {},
+  key_workshop: {},
+  card_storage: {},
+  key_armory: {},
 };
+
+/** Quantas vezes cada chave abre a sala dela antes de gastar. */
+export const KEY_USES: Partial<Record<ItemId, number>> = { key_manager: 3, key_workshop: 3, card_storage: 2, key_armory: 2 };
 
 export type BuildingId = 'workbench' | 'rainCollector' | 'filter' | 'stove' | 'garden' | 'bed' | 'latrine' | 'barricade' | 'radio';
 export type RecipeId = BuildingId | 'weapon';
@@ -128,16 +136,18 @@ export interface LocationDef {
   known: boolean;
   /** O prêmio trancado do local, só na incursão ativa: abre com a chave achada lá dentro ou arrombando. */
   prize: { name: string; loot: readonly ItemId[] };
+  /** Sala especial com porta de aço: abre com uma chave achada em outro local. */
+  room?: { name: string; key: ItemId; loot: readonly ItemId[] };
 }
 
 export const SHELTER_POS: [number, number] = [5, 15];
 
 export const LOCATIONS: readonly LocationDef[] = [
-  { id: 'market', name: 'Supermercado Sartori', icon: '🛒', description: 'Comida e água. Já foi saqueado, mas sempre sobra alguma coisa nos fundos.', danger: 1, loot: ['canned_food', 'canned_food', 'canned_food', 'water', 'water', 'wood', 'scrap', 'bandage', 'pack_hiking', 'knife'], pos: [10, 11], zombies: [3, 5], known: true, prize: { name: 'Cofre do gerente', loot: ['canned_food', 'canned_food', 'medicine', 'ammo', 'components', 'water'] } },
-  { id: 'garage', name: 'Auto Mecânica do Tião', icon: '🔧', description: 'Sucata, peças e um pouco de gasolina nos galões.', danger: 2, loot: ['scrap', 'scrap', 'parts', 'parts', 'fuel', 'wood', 'crowbar', 'bat', 'lockpick_kit', 'toolkit'], pos: [7, 5], zombies: [4, 6], known: true, prize: { name: 'Armário do Tião', loot: ['parts', 'parts', 'fuel', 'components', 'components', 'crowbar'] } },
-  { id: 'pharmacy', name: 'Drogaria São Bento', icon: '💊', description: 'Remédio e curativo. Muita gente teve a mesma ideia.', danger: 2, loot: ['medicine', 'bandage', 'bandage', 'water', 'components', 'first_aid', 'antibiotics'], pos: [18, 8], zombies: [4, 6], known: false, prize: { name: 'Armário de controlados', loot: ['medicine', 'medicine', 'medicine', 'bandage', 'components'] } },
-  { id: 'hospital', name: 'Santa Casa', icon: '🏥', description: 'Remédio e material de sobra, e o prédio cheio de infectados.', danger: 3, loot: ['medicine', 'medicine', 'components', 'bandage', 'parts', 'water', 'first_aid', 'flashlight', 'antibiotics'], pos: [21, 5], zombies: [6, 8], known: false, prize: { name: 'Farmácia interna', loot: ['medicine', 'medicine', 'medicine', 'components', 'components', 'bandage'] } },
-  { id: 'police', name: '23º DP', icon: '🚓', description: 'Munição e armas. Os policiais que ficaram de plantão ainda estão lá dentro.', danger: 3, loot: ['ammo', 'ammo', 'crowbar', 'components', 'canned_food', 'revolver', 'vest', 'ammo_box'], pos: [22, 14], zombies: [6, 8], known: false, prize: { name: 'Arsenal', loot: ['ammo', 'ammo', 'ammo', 'crowbar', 'components', 'medicine', 'revolver', 'vest', 'shotgun', 'pack_military', 'ammo_box'] } },
+  { id: 'market', name: 'Supermercado Sartori', icon: '🛒', description: 'Comida e água. Já foi saqueado, mas sempre sobra alguma coisa nos fundos.', danger: 1, loot: ['canned_food', 'canned_food', 'canned_food', 'water', 'water', 'wood', 'scrap', 'bandage', 'pack_hiking', 'knife', 'key_workshop'], pos: [10, 11], zombies: [3, 5], known: true, room: { name: 'Sala do gerente', key: 'key_manager', loot: ['canned_food', 'medicine', 'antibiotics', 'first_aid', 'components', 'pack_hiking'] }, prize: { name: 'Cofre do gerente', loot: ['canned_food', 'canned_food', 'medicine', 'ammo', 'components', 'water'] } },
+  { id: 'garage', name: 'Auto Mecânica do Tião', icon: '🔧', description: 'Sucata, peças e um pouco de gasolina nos galões.', danger: 2, loot: ['scrap', 'scrap', 'parts', 'parts', 'fuel', 'wood', 'crowbar', 'bat', 'lockpick_kit', 'toolkit', 'key_manager'], pos: [7, 5], zombies: [4, 6], known: true, room: { name: 'Depósito da oficina', key: 'key_workshop', loot: ['parts', 'toolkit', 'crowbar', 'bat', 'machete', 'lockpick_kit', 'fuel'] }, prize: { name: 'Armário do Tião', loot: ['parts', 'parts', 'fuel', 'components', 'components', 'crowbar'] } },
+  { id: 'pharmacy', name: 'Drogaria São Bento', icon: '💊', description: 'Remédio e curativo. Muita gente teve a mesma ideia.', danger: 2, loot: ['medicine', 'bandage', 'bandage', 'water', 'components', 'first_aid', 'antibiotics', 'key_manager', 'card_storage'], pos: [18, 8], zombies: [4, 6], known: false, prize: { name: 'Armário de controlados', loot: ['medicine', 'medicine', 'medicine', 'bandage', 'components'] } },
+  { id: 'hospital', name: 'Santa Casa', icon: '🏥', description: 'Remédio e material de sobra, e o prédio cheio de infectados.', danger: 3, loot: ['medicine', 'medicine', 'components', 'bandage', 'parts', 'water', 'first_aid', 'flashlight', 'antibiotics', 'key_armory'], pos: [21, 5], zombies: [6, 8], known: false, room: { name: 'Almoxarifado', key: 'card_storage', loot: ['medicine', 'antibiotics', 'first_aid', 'vest', 'components', 'flashlight'] }, prize: { name: 'Farmácia interna', loot: ['medicine', 'medicine', 'medicine', 'components', 'components', 'bandage'] } },
+  { id: 'police', name: '23º DP', icon: '🚓', description: 'Munição e armas. Os policiais que ficaram de plantão ainda estão lá dentro.', danger: 3, loot: ['ammo', 'ammo', 'crowbar', 'components', 'canned_food', 'revolver', 'vest', 'ammo_box', 'card_storage'], pos: [22, 14], zombies: [6, 8], known: false, room: { name: 'Sala do arsenal', key: 'key_armory', loot: ['revolver', 'ammo_box', 'vest', 'shotgun', 'ammo'] }, prize: { name: 'Arsenal', loot: ['ammo', 'ammo', 'ammo', 'crowbar', 'components', 'medicine', 'revolver', 'vest', 'shotgun', 'pack_military', 'ammo_box'] } },
 ];
 
 export function locationById(id: string): LocationDef {

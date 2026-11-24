@@ -163,6 +163,7 @@ export class RaidScene extends Phaser.Scene {
           const empty = c.searched && c.items.length === 0;
           const img = this.props.get(c.id);
           if (img) img.setTint(empty ? 0x6a655c : 0xffffff);
+          else if (c.corpse) this.corpse(g, px, py, empty, rect);
           else if (c.locked) this.vault(g, px, py, rect);
           else this.locker(g, px, py, empty, rect);
           // Ponto claro: ainda não vasculhado. Depois, a cor da melhor raridade que sobrou.
@@ -205,6 +206,18 @@ export class RaidScene extends Phaser.Scene {
   /** Porta em pixel: fechada é uma folha de tábuas na altura da parede; aberta deixa só os batentes. */
   private door(g: Phaser.GameObjects.Graphics, px: number, py: number, state: string, rect: (g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: string | number, a?: number) => void): void {
     const top = py - WALL_H;
+    if (state === 'sealed') {
+      // Porta de aço: chapa cinza rebitada com uma fechadura grande.
+      rect(g, px, top, TILE, TILE + WALL_H, PAL.ink);
+      rect(g, px + 1, top + 1, TILE - 2, TILE - 2, '#5d6268');
+      const face = py + TILE - WALL_H - 6;
+      rect(g, px + 2, face, TILE - 4, WALL_H + 6, '#4b5056');
+      rect(g, px + 2, face, TILE - 4, 1, '#7d838a');
+      for (const rx of [px + 4, px + TILE - 6]) for (const ry of [face + 2, face + WALL_H + 2]) rect(g, rx, ry, 2, 2, '#8a8f92');
+      rect(g, px + 11, face + 6, 6, 7, '#c9a54a');
+      rect(g, px + 13, face + 8, 2, 3, PAL.ink);
+      return;
+    }
     if (state === 'closed' || state === 'locked') {
       rect(g, px, top, TILE, TILE + WALL_H, PAL.ink);
       rect(g, px + 1, top + 1, TILE - 2, TILE - 2, PAL.wood1);
@@ -258,6 +271,17 @@ export class RaidScene extends Phaser.Scene {
       rect(g, px + TILE - 11, fy + WALL_H - 7, 5, 2, '#a9bcc0');
       rect(g, px + 13, fy + 2, 1, WALL_H - 6, PAL.ink);
     }
+  }
+
+  /** Corpo de alguém do grupo, de bruços numa poça escura. */
+  private corpse(g: Phaser.GameObjects.Graphics, px: number, py: number, empty: boolean, rect: (g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: string | number, a?: number) => void): void {
+    rect(g, px + 3, py + 14, 23, 9, '#3a1614', 0.85);
+    rect(g, px + 6, py + 12, 18, 9, PAL.ink);
+    rect(g, px + 7, py + 13, 11, 7, empty ? '#4a4c50' : '#5d6670');
+    rect(g, px + 18, py + 14, 5, 5, '#8a6a52');
+    rect(g, px + 19, py + 13, 4, 2, '#2a221c');
+    rect(g, px + 4, py + 15, 3, 3, '#5d6670');
+    rect(g, px + 10, py + 20, 4, 2, '#2f3a48');
   }
 
   /** Armário de aço amassado, de pé. */
