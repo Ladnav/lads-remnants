@@ -217,6 +217,7 @@ export function startRaid(s: ShelterState, req: RaidRequest, seed: number, nowMs
       lootScale: ((s.locationStock[loc.id] ?? 100) / 100) * (emergency ? 0.5 : 1),
       specials: SPECIALS_BY_DANGER[loc.danger],
       calm: CALM_BY_DANGER[loc.danger],
+      danger: loc.danger,
       mapNote: hasUndiscovered(s) && !s.mapsFound.includes(loc.id),
       prize: loc.prize,
     },

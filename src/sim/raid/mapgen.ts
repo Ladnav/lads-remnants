@@ -1,4 +1,5 @@
 import { CONTAINERS, type ItemId } from '../../data/items';
+import { rollItem } from './loot';
 import { ZOMBIES, type ZombieKind } from '../../data/zombies';
 import { chance, pick, randInt, type RngState } from '../rng';
 import { DIRS, bfsDistances, idx, isWalkableForPath, type GridLike } from './grid';
@@ -44,6 +45,8 @@ export interface SiteOptions {
   prize?: { name: string; loot: readonly ItemId[] };
   /** Turnos a mais entre as levas de zumbis (local calmo). Padrão 0. */
   calm?: number;
+  /** Perigo do local (1 a 3): empurra o saque para raridades melhores. Padrão 1. */
+  danger?: 1 | 2 | 3;
 }
 
 const DEFAULT_PRIZE = { name: 'Cofre', loot: ['medicine', 'ammo', 'components', 'parts', 'canned_food'] as readonly ItemId[] };
@@ -93,7 +96,8 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
       const def = pick(r, CONTAINERS);
       const count = randInt(r, def.min, def.max);
       const scale = opts.lootScale ?? 1;
-      const items = Array.from({ length: count }, () => pick(r, opts.loot && chance(r, 0.5) ? opts.loot : def.loot)).filter(
+      // Raridade pelo nível do móvel e o perigo do local; o tipo de item combina com o móvel e o local.
+      const items = Array.from({ length: count }, () => rollItem(r, def.tier, opts.danger ?? 1, [def.loot, opts.loot ?? []])).filter(
         () => scale >= 1 || chance(r, scale),
       );
       const id = containers.length;
@@ -169,7 +173,7 @@ function tryGenerate(r: RngState, opts: SiteOptions): GeneratedMap | null {
     name: prize.name,
     searched: false,
     locked: true,
-    items: Array.from({ length: prizeCount }, () => pick(r, prize.loot)),
+    items: Array.from({ length: prizeCount }, () => rollItem(r, 3, opts.danger ?? 1, [prize.loot, opts.loot ?? []])),
   });
   tiles[idx(g, vault.x, vault.y)].containerId = vaultId;
   // Ainda dá para chegar em tudo?

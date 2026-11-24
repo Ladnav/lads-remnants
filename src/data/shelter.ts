@@ -48,6 +48,11 @@ export const ITEM_TO_RESOURCES: Record<ItemId, Cost> = {
   components: { components: 1 },
   map_note: {},
   vault_key: {},
+  first_aid: { meds: 2, bandages: 2 },
+  car_battery: { components: 2 },
+  ammo_box: { ammo: 8 },
+  toolkit: { parts: 4, scrap: 2 },
+  antibiotics: { meds: 3 },
 };
 
 export type BuildingId = 'workbench' | 'rainCollector' | 'filter' | 'stove' | 'garden' | 'bed' | 'latrine' | 'barricade' | 'radio';

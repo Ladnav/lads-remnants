@@ -3,7 +3,9 @@ import { idx, isOpaque } from '../sim/raid/grid';
 import { computeVisible, exitStatus } from '../sim/raid/raid';
 import type { RaidState, Tile, Vec } from '../sim/raid/types';
 import { NightLight, type LightSource } from './night';
+import { RARITY_INFO } from '../data/items';
 import { LOCATIONS } from '../data/shelter';
+import { bestRarity } from '../sim/raid/loot';
 import { TILE, WALL_H, cameraZoom, feet, rowDepth, sharpText, smoothPainted } from './oblique';
 import { PAL, footShadow, paintHouse, type FloorKind } from './pixelHouse';
 import { Actor, preloadBodies, survivorLook, zombieLook } from './sprites';
@@ -163,14 +165,18 @@ export class RaidScene extends Phaser.Scene {
           if (img) img.setTint(empty ? 0x6a655c : 0xffffff);
           else if (c.locked) this.vault(g, px, py, rect);
           else this.locker(g, px, py, empty, rect);
-          // Ponto amarelo: ainda não vasculhado. Branco: tem coisa para levar.
+          // Ponto claro: ainda não vasculhado. Depois, a cor da melhor raridade que sobrou.
           const dotY = py - 6;
           if (!c.searched && !c.locked) {
             rect(m, px + 12, dotY, 4, 4, PAL.ink);
-            rect(m, px + 13, dotY + 1, 2, 2, '#e8c65e');
+            rect(m, px + 13, dotY + 1, 2, 2, '#d6cfc1');
           } else if (c.searched && c.items.length) {
-            rect(m, px + 12, dotY, 4, 4, PAL.ink);
-            rect(m, px + 13, dotY + 1, 2, 2, '#f1ebe0');
+            // Já vasculhado e com coisa: o ponto brilha na cor da melhor raridade que sobrou.
+            const best = bestRarity(c.items);
+            const color = best && best !== 'comum' ? RARITY_INFO[best].color : '#f1ebe0';
+            rect(m, px + 11, dotY - 1, 6, 6, PAL.ink);
+            rect(m, px + 12, dotY, 4, 4, color);
+            if (best === 'lendario' || best === 'raro') rect(m, px + 13, dotY - 3, 2, 2, color);
           }
         }
         if (!vis[i]) rect(fog, px, py - (raised ? WALL_H + 20 : 0), TILE, TILE + (raised ? WALL_H + 20 : 0), 0x000000, 0.42);

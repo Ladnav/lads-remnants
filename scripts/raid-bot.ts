@@ -59,7 +59,7 @@ function walk(s: RaidState, st: Vec): void {
 function play(seed: number, locIdx: number, survivorIdx: number) {
   const loc = LOCATIONS[locIdx];
   const def = SURVIVORS[survivorIdx];
-  const s = createRaid(seed, def, { site: loc.name, loot: loc.loot, zombies: loc.zombies, prize: loc.prize, specials: { 1: 0.1, 2: 0.25, 3: 0.4 }[loc.danger], calm: { 1: 4, 2: 1, 3: 0 }[loc.danger] });
+  const s = createRaid(seed, def, { site: loc.name, loot: loc.loot, zombies: loc.zombies, prize: loc.prize, specials: { 1: 0.1, 2: 0.25, 3: 0.4 }[loc.danger], calm: { 1: 4, 2: 1, 3: 0 }[loc.danger], danger: loc.danger });
   let vault = false;
   for (let guard = 0; guard < 400 && s.status === 'active'; guard++) {
     // Zumbi encostado: bate.

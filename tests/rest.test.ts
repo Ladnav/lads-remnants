@@ -49,3 +49,31 @@ describe('chave do prêmio', () => {
     }
   });
 });
+
+describe('raridade do saque', () => {
+  it('segue a tabela do nível do móvel (10 mil sorteios)', async () => {
+    const { rarityOdds, rollRarity } = await import('../src/sim/raid/loot');
+    for (const [tier, danger] of [[1, 1], [2, 1], [3, 2], [3, 3]] as const) {
+      const r = { rng: 12345 + tier * 7 + danger };
+      const n = 10000;
+      const count: Record<string, number> = { comum: 0, incomum: 0, raro: 0, lendario: 0 };
+      for (let i = 0; i < n; i++) count[rollRarity(r, tier, danger)]++;
+      const odds = rarityOdds(tier, danger);
+      for (const k of Object.keys(count)) expect(Math.abs((count[k] / n) * 100 - odds[k as keyof typeof odds])).toBeLessThan(2);
+    }
+  });
+
+  it('o perigo do local tira de comum e põe em raro', async () => {
+    const { rarityOdds } = await import('../src/sim/raid/loot');
+    expect(rarityOdds(1, 3).comum).toBe(70);
+    expect(rarityOdds(1, 3).raro).toBe(12);
+    expect(rarityOdds(3, 2).raro).toBe(35);
+  });
+
+  it('itens novos viram recursos no abrigo', async () => {
+    const { ITEM_TO_RESOURCES } = await import('../src/data/shelter');
+    const { ITEMS } = await import('../src/data/items');
+    for (const id of Object.keys(ITEMS)) expect(ITEM_TO_RESOURCES[id as keyof typeof ITEM_TO_RESOURCES]).toBeDefined();
+    expect(ITEM_TO_RESOURCES.first_aid).toEqual({ meds: 2, bandages: 2 });
+  });
+});

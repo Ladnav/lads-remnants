@@ -11,33 +11,58 @@ export type ItemId =
   | 'crowbar'
   | 'components'
   | 'map_note'
-  | 'vault_key';
+  | 'vault_key'
+  | 'first_aid'
+  | 'car_battery'
+  | 'ammo_box'
+  | 'toolkit'
+  | 'antibiotics';
+
+/** Raridade: decide a cor e a chance de aparecer (tabelas em sim/raid/loot.ts). */
+export type Rarity = 'comum' | 'incomum' | 'raro' | 'lendario';
+export const RARITIES: readonly Rarity[] = ['comum', 'incomum', 'raro', 'lendario'];
+export const RARITY_INFO: Record<Rarity, { name: string; color: string }> = {
+  comum: { name: 'Comum', color: '#a39c8d' },
+  incomum: { name: 'Incomum', color: '#8fbf5a' },
+  raro: { name: 'Raro', color: '#5b9bd5' },
+  lendario: { name: 'Lendário', color: '#e8c65e' },
+};
 
 export interface ItemDef {
   name: string;
   weight: number;
   value: number;
   icon: string;
+  rarity: Rarity;
+  /** Pista ou chave: não entra no sorteio de saque. */
+  special?: boolean;
 }
 
 export const ITEMS: Record<ItemId, ItemDef> = {
-  canned_food: { name: 'Enlatado', weight: 1, value: 3, icon: '🥫' },
-  water: { name: 'Água', weight: 1, value: 3, icon: '💧' },
-  medicine: { name: 'Remédio', weight: 0.5, value: 6, icon: '💊' },
-  bandage: { name: 'Bandagem', weight: 0.5, value: 3, icon: '🩹' },
-  scrap: { name: 'Sucata', weight: 2, value: 2, icon: '🔩' },
-  wood: { name: 'Madeira', weight: 2, value: 1, icon: '🪵' },
-  parts: { name: 'Peças', weight: 1, value: 4, icon: '⚙️' },
-  ammo: { name: 'Munição', weight: 0.5, value: 5, icon: '🔸' },
-  fuel: { name: 'Combustível', weight: 3, value: 6, icon: '⛽' },
-  crowbar: { name: 'Pé de cabra', weight: 2, value: 4, icon: '🔧' },
-  components: { name: 'Componentes eletrônicos', weight: 1, value: 8, icon: '📟' },
-  map_note: { name: 'Mapa rabiscado', weight: 0, value: 0, icon: '🗺️' },
-  vault_key: { name: 'Chave do cofre', weight: 0, value: 0, icon: '🗝️' },
+  canned_food: { name: 'Enlatado', weight: 1, value: 3, icon: '🥫', rarity: 'comum' },
+  water: { name: 'Água', weight: 1, value: 3, icon: '💧', rarity: 'comum' },
+  medicine: { name: 'Remédio', weight: 0.5, value: 6, icon: '💊', rarity: 'incomum' },
+  bandage: { name: 'Bandagem', weight: 0.5, value: 3, icon: '🩹', rarity: 'comum' },
+  scrap: { name: 'Sucata', weight: 2, value: 2, icon: '🔩', rarity: 'comum' },
+  wood: { name: 'Madeira', weight: 2, value: 1, icon: '🪵', rarity: 'comum' },
+  parts: { name: 'Peças', weight: 1, value: 4, icon: '⚙️', rarity: 'incomum' },
+  ammo: { name: 'Munição', weight: 0.5, value: 5, icon: '🔸', rarity: 'raro' },
+  fuel: { name: 'Combustível', weight: 3, value: 6, icon: '⛽', rarity: 'incomum' },
+  crowbar: { name: 'Pé de cabra', weight: 2, value: 4, icon: '🔧', rarity: 'incomum' },
+  components: { name: 'Componentes eletrônicos', weight: 1, value: 8, icon: '📟', rarity: 'raro' },
+  map_note: { name: 'Mapa rabiscado', weight: 0, value: 0, icon: '🗺️', rarity: 'raro', special: true },
+  vault_key: { name: 'Chave do cofre', weight: 0, value: 0, icon: '🗝️', rarity: 'incomum', special: true },
+  first_aid: { name: 'Kit de primeiros socorros', weight: 1, value: 12, icon: '🧰', rarity: 'raro' },
+  car_battery: { name: 'Bateria de carro', weight: 3, value: 12, icon: '🔋', rarity: 'raro' },
+  ammo_box: { name: 'Caixa de munição', weight: 2, value: 20, icon: '📦', rarity: 'lendario' },
+  toolkit: { name: 'Maleta de ferramentas', weight: 3, value: 20, icon: '🧳', rarity: 'lendario' },
+  antibiotics: { name: 'Antibiótico', weight: 0.5, value: 18, icon: '💉', rarity: 'lendario' },
 };
 
 export interface ContainerDef {
   name: string;
+  /** Nível do móvel (1 a 3): quanto mais alto, mais chance de coisa rara. */
+  tier: 1 | 2 | 3;
   loot: readonly ItemId[];
   min: number;
   max: number;
@@ -45,8 +70,8 @@ export interface ContainerDef {
 
 // Tipos de container do mercado e o que costumam guardar.
 export const CONTAINERS: readonly ContainerDef[] = [
-  { name: 'Prateleira', loot: ['canned_food', 'canned_food', 'water', 'water', 'wood'], min: 0, max: 3 },
-  { name: 'Balcão', loot: ['bandage', 'medicine', 'water', 'ammo'], min: 0, max: 2 },
-  { name: 'Caixa de ferramentas', loot: ['scrap', 'parts', 'parts', 'crowbar', 'fuel'], min: 1, max: 2 },
-  { name: 'Armário', loot: ['components', 'bandage', 'scrap', 'canned_food', 'ammo'], min: 0, max: 2 },
+  { name: 'Prateleira', tier: 1, loot: ['canned_food', 'canned_food', 'water', 'water', 'wood'], min: 0, max: 3 },
+  { name: 'Balcão', tier: 1, loot: ['bandage', 'medicine', 'water', 'ammo'], min: 0, max: 2 },
+  { name: 'Caixa de ferramentas', tier: 2, loot: ['scrap', 'parts', 'parts', 'crowbar', 'fuel'], min: 1, max: 2 },
+  { name: 'Armário', tier: 2, loot: ['components', 'bandage', 'scrap', 'canned_food', 'ammo'], min: 0, max: 2 },
 ];

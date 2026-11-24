@@ -1300,3 +1300,8 @@ img.face {
     height: 192px;
   }
 }
+
+/* Raridade do saque: a cor do nome do item. */
+.rar-incomum { color: #8fbf5a; }
+.rar-raro { color: #6aa8e0; }
+.rar-lendario { color: #e8c65e; text-shadow: 0 0 6px rgba(232, 198, 94, 0.45); }

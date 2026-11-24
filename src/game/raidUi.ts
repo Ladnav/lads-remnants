@@ -1,4 +1,11 @@
-import { ITEMS } from '../data/items';
+import { ITEMS, RARITY_INFO, type ItemId } from '../data/items';
+
+/** Nome do item na cor da raridade (comum fica na cor normal do texto). */
+const itemLabel = (it: ItemId): string => {
+  const r = ITEMS[it].rarity;
+  const tag = r === 'comum' ? ITEMS[it].name : `<span class="rar-${r}" title="${RARITY_INFO[r].name}">${ITEMS[it].name}</span>`;
+  return `${ITEMS[it].icon} ${tag}`;
+};
 import { TRAITS } from '../data/survivors';
 import { DIRS, chebyshev, idx, manhattan } from '../sim/raid/grid';
 import {
@@ -269,7 +276,7 @@ export class RaidUi {
     if (!s) return;
     const escaped = s.status === 'extracted';
     const wounds = s.survivor.maxHp - s.survivor.hp;
-    const items = s.backpack.map((it) => `${ITEMS[it].icon} ${ITEMS[it].name}`).join(', ') || 'nada';
+    const items = s.backpack.map(itemLabel).join(', ') || 'nada';
     this.overlay.innerHTML = `
       <div class="modal">
         <h2 class="${escaped ? 'good' : 'bad'}">${escaped ? `${s.survivor.name} voltou para o abrigo` : `${s.survivor.name} não voltou`}</h2>
@@ -346,17 +353,17 @@ export class RaidUi {
               ? c.items
                   .map((it, i) => {
                     const fits = weight + ITEMS[it].weight <= cap;
-                    return `<div class="row"><span>${ITEMS[it].icon} ${ITEMS[it].name} <span class="muted">${ITEMS[it].weight}kg</span></span>${fits ? btn('Pegar', { type: 'take', containerId: c.id, index: i }) : '<span class="muted">pesado</span>'}</div>`;
+                    return `<div class="row"><span>${itemLabel(it)} <span class="muted">${ITEMS[it].weight}kg</span></span>${fits ? btn('Pegar', { type: 'take', containerId: c.id, index: i }) : '<span class="muted">pesado</span>'}</div>`;
                   })
                   .join('')
               : '<div class="row muted">vazio</div>';
             return `<div class="row"><strong>${c.name}</strong></div>${items}`;
           })
           .join('')
-      : '<div class="muted small">Nada por perto. Containers com ponto amarelo ainda não foram vasculhados.</div>';
+      : '<div class="muted small">Nada por perto. Móveis com ponto claro ainda não foram vasculhados; depois o ponto fica na cor do melhor item que sobrou.</div>';
 
     const pack = s.backpack.length
-      ? s.backpack.map((it, i) => `<div class="row"><span>${ITEMS[it].icon} ${ITEMS[it].name}</span>${btn('Largar', { type: 'drop', index: i })}</div>`).join('')
+      ? s.backpack.map((it, i) => `<div class="row"><span>${itemLabel(it)}</span>${btn('Largar', { type: 'drop', index: i })}</div>`).join('')
       : '<div class="muted small">Vazia.</div>';
 
     // O essencial fica na barra de cima, colada no jogo; o painel guarda o que se toca.
